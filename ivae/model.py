@@ -7,6 +7,7 @@ from torch import nn
 from torch.nn import functional as F
 
 from params import HEAD_MODEL_ID
+from pooling import mean_pooling
 from transformers import AutoModel
 
 
@@ -239,3 +240,9 @@ class iVAE(nn.Module):
         self._training_hyperparams[3] = max(1, a * .5 * (1 - it / thr))
         if it > thr:
             self.anneal_params = False
+
+    def encode_to_x_and_u(self, token_ids, token_mask):
+        x = self.head(input_ids=token_ids, attention_mask=token_mask)
+        x = mean_pooling(model_output=x, attention_mask=token_mask)
+        u = (token_ids + 1).log()
+        return x, u
