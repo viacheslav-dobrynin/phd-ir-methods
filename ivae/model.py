@@ -143,7 +143,7 @@ class iVAE(nn.Module):
     def __init__(self, latent_dim, data_dim, aux_dim, prior=None, decoder=None, encoder=None,
                  n_layers=3, hidden_dim=50, activation='lrelu', slope=.1, device='cpu', anneal=False):
         super().__init__()
-        head = AutoModel.from_pretrained(HEAD_MODEL_ID)
+        head = AutoModel.from_pretrained(HEAD_MODEL_ID).to(device)
         head.eval()
         for p in head.parameters():
             p.requires_grad = False
