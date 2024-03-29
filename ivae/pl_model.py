@@ -9,7 +9,7 @@ from transformers import AutoModel
 
 
 class SparserModel(L.LightningModule):
-    def __init__(self, latent_dim, data_dim, aux_dim, prior=None, decoder=None, encoder=None,
+    def __init__(self, latent_dim, aux_dim, prior=None, decoder=None, encoder=None,
                  n_layers=3, hidden_dim=50, activation='lrelu', slope=.1, device='cpu', anneal=False):
         super().__init__()
         head = AutoModel.from_pretrained(HEAD_MODEL_ID).to(device)
@@ -18,7 +18,7 @@ class SparserModel(L.LightningModule):
             p.requires_grad = False
         self.head = head
 
-        self.data_dim = data_dim
+        self.data_dim = self.head.config.hidden_size
         self.latent_dim = latent_dim
         self.aux_dim = aux_dim
         self.hidden_dim = hidden_dim
@@ -46,12 +46,12 @@ class SparserModel(L.LightningModule):
         self.prior_mean = torch.zeros(1).to(device)
         self.logl = MLP(aux_dim, latent_dim, hidden_dim, n_layers, activation=activation, slope=slope, device=device)
         # decoder params
-        self.f = MLP(latent_dim, data_dim, hidden_dim, n_layers, activation=activation, slope=slope, device=device)
+        self.f = MLP(latent_dim, self.data_dim, hidden_dim, n_layers, activation=activation, slope=slope, device=device)
         self.decoder_var = .01 * torch.ones(1).to(device)
         # encoder params
-        self.g = MLP(data_dim + aux_dim, latent_dim, hidden_dim, n_layers, activation=activation, slope=slope,
+        self.g = MLP(self.data_dim + aux_dim, latent_dim, hidden_dim, n_layers, activation=activation, slope=slope,
                      device=device)
-        self.logv = MLP(data_dim + aux_dim, latent_dim, hidden_dim, n_layers, activation=activation, slope=slope,
+        self.logv = MLP(self.data_dim + aux_dim, latent_dim, hidden_dim, n_layers, activation=activation, slope=slope,
                         device=device)
 
         self.apply(weights_init)
