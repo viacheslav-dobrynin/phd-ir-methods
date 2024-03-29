@@ -6,5 +6,6 @@ HEAD_MODEL_ID = "sentence-transformers/msmarco-distilbert-dot-v5"
 
 # TRAINING PARAMS
 REC_LOSS_ALPHA = 1.0
+DIST_LOSS_ALPHA = 1.0
 INDEP_LOSS_ALPHA = 1.0
 LEARNING_RATE = 1e-4
