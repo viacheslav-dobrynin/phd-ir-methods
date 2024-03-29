@@ -5,6 +5,6 @@ MAX_LENGTH = 512
 HEAD_MODEL_ID = "sentence-transformers/msmarco-distilbert-dot-v5"
 
 # TRAINING PARAMS
-REC_LOSS = 1.0
-INDEP_LOSS = 1.0
+REC_LOSS_ALPHA = 1.0
+INDEP_LOSS_ALPHA = 1.0
 LEARNING_RATE = 1e-4

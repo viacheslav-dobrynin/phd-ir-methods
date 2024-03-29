@@ -4,14 +4,17 @@ import pytorch_lightning as L
 
 from ivae.model import Normal, MLP, weights_init
 from loss import ReconstructionLoss
-from params import HEAD_MODEL_ID, LEARNING_RATE, INDEP_LOSS
+from params import HEAD_MODEL_ID, LEARNING_RATE, INDEP_LOSS_ALPHA, REC_LOSS_ALPHA
 from pooling import mean_pooling
 from transformers import AutoModel
 
 
 class SparserModel(L.LightningModule):
-    def __init__(self, latent_dim, aux_dim, prior=None, decoder=None, encoder=None,
-                 n_layers=3, hidden_dim=50, activation='lrelu', slope=.1, device='cpu', anneal=False):
+    def __init__(self, latent_dim, aux_dim, hidden_dim=1000,
+                 rec_loss_alpha=REC_LOSS_ALPHA, indep_loss_alpha=INDEP_LOSS_ALPHA,
+                 prior=None, decoder=None, encoder=None,
+                 n_layers=3, activation='lrelu', slope=.1,
+                 device='cpu', anneal=False):
         super().__init__()
         head = AutoModel.from_pretrained(HEAD_MODEL_ID).to(device)
         head.eval()
@@ -55,7 +58,8 @@ class SparserModel(L.LightningModule):
         self.logv = MLP(self.data_dim + aux_dim, latent_dim, hidden_dim, n_layers, activation=activation, slope=slope,
                         device=device)
         # losses
-        self.reconstruction_loss = ReconstructionLoss()
+        self.reconstruction_loss = ReconstructionLoss(alpha=rec_loss_alpha)
+        self.indep_loss_alpha = indep_loss_alpha
 
         self.apply(weights_init)
 
@@ -126,7 +130,7 @@ class SparserModel(L.LightningModule):
         x, u = self.__encode_to_x_and_u(token_ids=token_ids, token_mask=token_mask)
         elbo, x_rec, s_est = self.elbo(x, u)
         rec_loss = self.reconstruction_loss(x, x_rec)
-        indep_loss = INDEP_LOSS * elbo.mul(-1)
+        indep_loss = self.indep_loss_alpha * elbo.mul(-1)
         loss = rec_loss + indep_loss
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         outs = {
