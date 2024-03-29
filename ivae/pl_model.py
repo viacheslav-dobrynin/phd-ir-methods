@@ -3,7 +3,8 @@ import torch
 import pytorch_lightning as L
 
 from ivae.model import Normal, MLP, weights_init
-from params import HEAD_MODEL_ID, LEARNING_RATE
+from loss import ReconstructionLoss
+from params import HEAD_MODEL_ID, LEARNING_RATE, INDEP_LOSS
 from pooling import mean_pooling
 from transformers import AutoModel
 
@@ -54,7 +55,7 @@ class SparserModel(L.LightningModule):
         self.logv = MLP(self.data_dim + aux_dim, latent_dim, hidden_dim, n_layers, activation=activation, slope=slope,
                         device=device)
         # losses
-        self.reconstruction_loss = torch.nn.MSELoss()
+        self.reconstruction_loss = ReconstructionLoss()
 
         self.apply(weights_init)
 
@@ -125,7 +126,7 @@ class SparserModel(L.LightningModule):
         x, u = self.__encode_to_x_and_u(token_ids=token_ids, token_mask=token_mask)
         elbo, x_rec, s_est = self.elbo(x, u)
         rec_loss = self.reconstruction_loss(x, x_rec)
-        indep_loss = elbo.mul(-1)
+        indep_loss = INDEP_LOSS * elbo.mul(-1)
         loss = rec_loss + indep_loss
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         outs = {
