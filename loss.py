@@ -30,6 +30,15 @@ class DistanceLoss:
         return dot_products
 
 
+class L1:
+    def __init__(self, alpha):
+        self.alpha = alpha
+
+    def __call__(self, x_rep):
+        all_params = torch.cat([t.view(-1) for t in x_rep])
+        return self.alpha * torch.norm(all_params, 1)
+
+
 class FLOPS:
     """constraint from Minimizing FLOPs to Learn Efficient Sparse Representations
     https://arxiv.org/abs/2004.05665
