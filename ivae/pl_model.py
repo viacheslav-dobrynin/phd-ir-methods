@@ -148,7 +148,7 @@ class SparserModel(L.LightningModule):
         z_nonzero = torch.count_nonzero(z).float() // len(z)
 
         loss = rec_loss + reg_loss + dist_loss + indep_loss
-        self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
+        self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
         outs = {
             "loss": loss,
             "rec_loss": rec_loss,
@@ -170,12 +170,12 @@ class SparserModel(L.LightningModule):
 
     def on_train_epoch_end(self):
         outs = self.training_step_outputs
-        loss = torch.stack([x['loss'] for x in outs]).mean()
-        rec_loss = torch.stack([x['rec_loss'] for x in outs]).mean()
-        reg_loss = torch.stack([x['reg_loss'] for x in outs]).mean()
-        dist_loss = torch.stack([x['dist_loss'] for x in outs]).mean()
-        indep_loss = torch.stack([x['indep_loss'] for x in outs]).mean()
-        z_nonzero = torch.stack([x['z_nonzero'] for x in outs]).mean()
+        loss = torch.stack([out['loss'] for out in outs]).mean()
+        rec_loss = torch.stack([out['rec_loss'] for out in outs]).mean()
+        reg_loss = torch.stack([out['reg_loss'] for out in outs]).mean()
+        dist_loss = torch.stack([out['dist_loss'] for out in outs]).mean()
+        indep_loss = torch.stack([out['indep_loss'] for out in outs]).mean()
+        z_nonzero = torch.stack([out['z_nonzero'] for out in outs]).mean()
 
         print(
             f"loss = {loss:.2f}: " +
