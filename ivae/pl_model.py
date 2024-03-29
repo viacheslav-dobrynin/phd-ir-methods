@@ -53,6 +53,8 @@ class SparserModel(L.LightningModule):
                      device=device)
         self.logv = MLP(self.data_dim + aux_dim, latent_dim, hidden_dim, n_layers, activation=activation, slope=slope,
                         device=device)
+        # losses
+        self.reconstruction_loss = torch.nn.MSELoss()
 
         self.apply(weights_init)
 
@@ -88,6 +90,7 @@ class SparserModel(L.LightningModule):
 
     def elbo(self, x, u):
         decoder_params, (g, v), z, prior_params = self.forward(x, u)
+        x_rec = decoder_params[0]
         log_px_z = self.decoder_dist.log_pdf(x, *decoder_params)
         log_qz_xu = self.encoder_dist.log_pdf(z, g, v)
         log_pz_u = self.prior_dist.log_pdf(z, *prior_params)
@@ -104,7 +107,7 @@ class SparserModel(L.LightningModule):
                     log_qz_i - log_pz_u)).mean(), z
 
         else:
-            return (log_px_z + log_pz_u - log_qz_xu).mean(), z
+            return (log_px_z + log_pz_u - log_qz_xu).mean(), x_rec, z
 
     def anneal(self, N, max_iter, it):
         thr = int(max_iter / 1.6)
@@ -120,16 +123,30 @@ class SparserModel(L.LightningModule):
     def training_step(self, batch, batch_idx):
         token_ids, token_mask = batch
         x, u = self.__encode_to_x_and_u(token_ids=token_ids, token_mask=token_mask)
-        elbo, s_est = self.elbo(x, u)
-        loss = elbo.mul(-1)
+        elbo, x_rec, s_est = self.elbo(x, u)
+        rec_loss = self.reconstruction_loss(x, x_rec)
+        indep_loss = elbo.mul(-1)
+        loss = rec_loss + indep_loss
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
-        self.training_step_outputs.append(loss)
+        outs = {
+            "loss": loss,
+            "rec_loss": rec_loss,
+            "indep_loss": indep_loss,
+        }
+        self.training_step_outputs.append(outs)
         return loss
 
     def on_train_epoch_end(self):
-        outs = torch.stack(self.training_step_outputs)
-        mean_loss = outs.mean()
-        print(f'loss={mean_loss:.2f}')
+        outs = self.training_step_outputs
+        loss = torch.stack([x['loss'] for x in outs]).mean()
+        rec_loss = torch.stack([x['rec_loss'] for x in outs]).mean()
+        indep_loss = torch.stack([x['indep_loss'] for x in outs]).mean()
+
+        print(
+            f"loss = {loss:.2f}: " +
+            f"reconstruction loss = {rec_loss:.2f}, " +
+            f"independence loss = {indep_loss:.2f}"
+        )
         self.training_step_outputs.clear()
 
     def configure_optimizers(self):
