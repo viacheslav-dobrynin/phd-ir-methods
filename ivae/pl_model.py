@@ -25,6 +25,7 @@ class SparserModel(L.LightningModule):
                  device='cpu', anneal=False):
 
         super().__init__()
+        self.save_hyperparameters()
         head = AutoModel.from_pretrained(HEAD_MODEL_ID).to(device)
         head.eval()
         for p in head.parameters():
