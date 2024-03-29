@@ -4,9 +4,12 @@ import pytorch_lightning as L
 
 from ivae.model import Normal, MLP, weights_init
 from loss import ReconstructionLoss, DistanceLoss, FLOPS
-from params import HEAD_MODEL_ID, LEARNING_RATE, INDEP_LOSS_ALPHA, REC_LOSS_ALPHA, DIST_LOSS_ALPHA, REG_LOSS_ALPHA
+from params import (HEAD_MODEL_ID, LEARNING_RATE, INDEP_LOSS_ALPHA,
+                    REC_LOSS_ALPHA, DIST_LOSS_ALPHA, REG_LOSS_ALPHA,
+                    LOG_EVERY)
 from pooling import mean_pooling
 from transformers import AutoModel
+import wandb
 
 
 class SparserModel(L.LightningModule):
@@ -77,8 +80,8 @@ class SparserModel(L.LightningModule):
     def encode(self, token_ids, token_mask):
         x, u = self.__encode_to_x_and_u(token_ids=token_ids, token_mask=token_mask)
         encoder_params = self.encoder_params(x, u)
-        s = self.encoder_dist.sample(*encoder_params)
-        return s
+        z = self.encoder_dist.sample(*encoder_params)
+        return z
 
     def encoder_params(self, x, u):
         xu = torch.cat((x, u), 1)
@@ -86,8 +89,8 @@ class SparserModel(L.LightningModule):
         logv = self.logv(xu)
         return g, logv.exp()
 
-    def decoder_params(self, s):
-        f = self.f(s)
+    def decoder_params(self, z):
+        f = self.f(z)
         return f, self.decoder_var
 
     def prior_params(self, u):
@@ -136,11 +139,14 @@ class SparserModel(L.LightningModule):
     def training_step(self, batch, batch_idx):
         token_ids, token_mask = batch
         x, u = self.__encode_to_x_and_u(token_ids=token_ids, token_mask=token_mask)
+
         elbo, x_rec, z = self.elbo(x, u)
         rec_loss = self.reconstruction_loss(x, x_rec)
         reg_loss = self.regularization_loss(z)
         dist_loss = self.distance_loss(x, z)
         indep_loss = self.indep_loss_alpha * elbo.mul(-1)
+        z_nonzero = torch.count_nonzero(z).float() // len(z)
+
         loss = rec_loss + reg_loss + dist_loss + indep_loss
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         outs = {
@@ -149,8 +155,17 @@ class SparserModel(L.LightningModule):
             "reg_loss": reg_loss,
             "dist_loss": dist_loss,
             "indep_loss": indep_loss,
+            "z_nonzero": z_nonzero,
         }
         self.training_step_outputs.append(outs)
+        if batch_idx % LOG_EVERY == 0:
+            wandb.log({'loss': loss})
+            wandb.log({'reconstruction loss': rec_loss.detach().clone()})
+            wandb.log({'regularization loss': reg_loss.detach().clone()})
+            wandb.log({'distance loss': dist_loss.detach().clone()})
+            wandb.log({'independence loss': indep_loss.detach().clone()})
+            wandb.log({'nonzero count': z_nonzero.detach().clone()})
+
         return loss
 
     def on_train_epoch_end(self):
@@ -160,13 +175,15 @@ class SparserModel(L.LightningModule):
         reg_loss = torch.stack([x['reg_loss'] for x in outs]).mean()
         dist_loss = torch.stack([x['dist_loss'] for x in outs]).mean()
         indep_loss = torch.stack([x['indep_loss'] for x in outs]).mean()
+        z_nonzero = torch.stack([x['z_nonzero'] for x in outs]).mean()
 
         print(
             f"loss = {loss:.2f}: " +
             f"reconstruction loss = {rec_loss:.2f}, " +
             f"regularization loss = {reg_loss:.2f}, " +
             f"distance loss = {dist_loss:.2f}, " +
-            f"independence loss = {indep_loss:.2f}"
+            f"independence loss = {indep_loss:.2f}, " +
+            f"nonzero count = {z_nonzero:.2f}"
         )
         self.training_step_outputs.clear()
 
