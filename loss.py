@@ -28,3 +28,15 @@ class DistanceLoss:
         x = x.to(torch.float64)
         dot_products = x.mm(x.T).to(_orig_dtype)
         return dot_products
+
+
+class FLOPS:
+    """constraint from Minimizing FLOPs to Learn Efficient Sparse Representations
+    https://arxiv.org/abs/2004.05665
+    """
+
+    def __init__(self, alpha):
+        self.alpha = alpha
+
+    def __call__(self, x_rep):
+        return self.alpha * torch.sum(torch.mean(torch.abs(x_rep), dim=0) ** 2)

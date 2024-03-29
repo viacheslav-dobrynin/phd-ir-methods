@@ -3,18 +3,24 @@ import torch
 import pytorch_lightning as L
 
 from ivae.model import Normal, MLP, weights_init
-from loss import ReconstructionLoss, DistanceLoss
-from params import HEAD_MODEL_ID, LEARNING_RATE, INDEP_LOSS_ALPHA, REC_LOSS_ALPHA, DIST_LOSS_ALPHA
+from loss import ReconstructionLoss, DistanceLoss, FLOPS
+from params import HEAD_MODEL_ID, LEARNING_RATE, INDEP_LOSS_ALPHA, REC_LOSS_ALPHA, DIST_LOSS_ALPHA, REG_LOSS_ALPHA
 from pooling import mean_pooling
 from transformers import AutoModel
 
 
 class SparserModel(L.LightningModule):
     def __init__(self, latent_dim, aux_dim, hidden_dim=1000,
-                 rec_loss_alpha=REC_LOSS_ALPHA, indep_loss_alpha=INDEP_LOSS_ALPHA, distance_loss_alpha=DIST_LOSS_ALPHA,
+
+                 rec_loss_alpha=REC_LOSS_ALPHA, indep_loss_alpha=INDEP_LOSS_ALPHA,
+                 distance_loss_alpha=DIST_LOSS_ALPHA, regularization_loss=FLOPS(alpha=REG_LOSS_ALPHA),
+
                  prior=None, decoder=None, encoder=None,
+
                  n_layers=3, activation='lrelu', slope=.1,
+
                  device='cpu', anneal=False):
+
         super().__init__()
         head = AutoModel.from_pretrained(HEAD_MODEL_ID).to(device)
         head.eval()
@@ -59,6 +65,7 @@ class SparserModel(L.LightningModule):
                         device=device)
         # losses
         self.reconstruction_loss = ReconstructionLoss(alpha=rec_loss_alpha)
+        self.regularization_loss = regularization_loss
         self.distance_loss = DistanceLoss(alpha=distance_loss_alpha)
         self.indep_loss_alpha = indep_loss_alpha
 
@@ -131,13 +138,15 @@ class SparserModel(L.LightningModule):
         x, u = self.__encode_to_x_and_u(token_ids=token_ids, token_mask=token_mask)
         elbo, x_rec, z = self.elbo(x, u)
         rec_loss = self.reconstruction_loss(x, x_rec)
+        reg_loss = self.regularization_loss(z)
         dist_loss = self.distance_loss(x, z)
         indep_loss = self.indep_loss_alpha * elbo.mul(-1)
-        loss = rec_loss + dist_loss + indep_loss
+        loss = rec_loss + reg_loss + dist_loss + indep_loss
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         outs = {
             "loss": loss,
             "rec_loss": rec_loss,
+            "reg_loss": reg_loss,
             "dist_loss": dist_loss,
             "indep_loss": indep_loss,
         }
@@ -148,12 +157,14 @@ class SparserModel(L.LightningModule):
         outs = self.training_step_outputs
         loss = torch.stack([x['loss'] for x in outs]).mean()
         rec_loss = torch.stack([x['rec_loss'] for x in outs]).mean()
+        reg_loss = torch.stack([x['reg_loss'] for x in outs]).mean()
         dist_loss = torch.stack([x['dist_loss'] for x in outs]).mean()
         indep_loss = torch.stack([x['indep_loss'] for x in outs]).mean()
 
         print(
             f"loss = {loss:.2f}: " +
             f"reconstruction loss = {rec_loss:.2f}, " +
+            f"regularization loss = {reg_loss:.2f}, " +
             f"distance loss = {dist_loss:.2f}, " +
             f"independence loss = {indep_loss:.2f}"
         )
