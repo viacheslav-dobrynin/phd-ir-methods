@@ -13,7 +13,7 @@ import wandb
 
 
 class SparserModel(L.LightningModule):
-    def __init__(self, latent_dim, aux_dim, hidden_dim=1000,
+    def __init__(self, latent_dim, aux_dim, x_to_u_fun, hidden_dim=1000,
 
                  rec_loss_alpha=REC_LOSS_ALPHA, indep_loss_alpha=INDEP_LOSS_ALPHA,
                  distance_loss_alpha=DIST_LOSS_ALPHA, regularization_loss=FLOPS(alpha=REG_LOSS_ALPHA),
@@ -40,6 +40,7 @@ class SparserModel(L.LightningModule):
         self.activation = activation
         self.slope = slope
         self.anneal_params = anneal
+        self.x_to_u_fun = x_to_u_fun
 
         if prior is None:
             self.prior_dist = Normal(device=device)
@@ -195,5 +196,5 @@ class SparserModel(L.LightningModule):
     def __encode_to_x_and_u(self, token_ids, token_mask):
         x = self.head(input_ids=token_ids, attention_mask=token_mask)
         x = mean_pooling(model_output=x, attention_mask=token_mask)
-        u = (token_ids + 1).log()
+        u = self.x_to_u_fun(x)
         return x, u
