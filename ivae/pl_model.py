@@ -57,7 +57,7 @@ class SparserModel(L.LightningModule):
             self.encoder_dist = encoder
 
         # prior_params
-        self.prior_mean = torch.zeros(1).to(device)
+        self.running_prior_mean = torch.zeros(1).to(device)
         self.logl = MLP(aux_dim, latent_dim, hidden_dim, n_layers, activation=activation, slope=slope, device=device)
         # decoder params
         self.f = MLP(latent_dim, self.data_dim, hidden_dim, n_layers, activation=activation, slope=slope, device=device)
@@ -96,7 +96,7 @@ class SparserModel(L.LightningModule):
 
     def prior_params(self, u):
         logl = self.logl(u)
-        return self.prior_mean, logl.exp()
+        return self.running_prior_mean, logl.exp()
 
     def forward(self, x, u):
         prior_params = self.prior_params(u)
@@ -140,6 +140,9 @@ class SparserModel(L.LightningModule):
     def training_step(self, batch, batch_idx):
         token_ids, token_mask = batch
         x, u = self.__encode_to_x_and_u(token_ids=token_ids, token_mask=token_mask)
+
+        with torch.no_grad():
+            self.running_prior_mean = 0.99 * self.running_prior_mean + 0.01 * u.mean()
 
         elbo, x_rec, z = self.elbo(x, u)
         rec_loss = self.reconstruction_loss(x, x_rec)

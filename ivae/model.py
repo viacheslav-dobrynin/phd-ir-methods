@@ -91,7 +91,7 @@ class Normal(Dist):
         super().__init__()
         self.device = device
         self.c = 2 * np.pi * torch.ones(1).to(self.device)
-        self._dist = dist.normal.Normal(torch.zeros(1).to(self.device), torch.ones(1).to(self.device))
+        self._dist = dist.normal.Normal(loc=torch.zeros(1).to(self.device), scale=torch.ones(1).to(self.device))
         self.name = 'gauss'
 
     def sample(self, mu, v):
