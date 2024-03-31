@@ -74,7 +74,10 @@ class SparserModel(L.LightningModule):
         self.distance_loss = DistanceLoss(alpha=distance_loss_alpha)
         self.indep_loss_alpha = indep_loss_alpha
 
-        self.apply(weights_init)
+        self.logl.apply(weights_init)
+        self.f.apply(weights_init)
+        self.g.apply(weights_init)
+        self.logv.apply(weights_init)
 
         self._training_hyperparams = [1., 1., 1., 1., 1]
         self.training_step_outputs = []
