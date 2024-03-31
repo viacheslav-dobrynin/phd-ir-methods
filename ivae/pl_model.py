@@ -13,7 +13,7 @@ import wandb
 
 
 class SparserModel(L.LightningModule):
-    def __init__(self, latent_dim, embs_kmeans, hidden_dim=1000,
+    def __init__(self, latent_dim, embs_kmeans, dataset_n, max_iter, hidden_dim=1000,
 
                  rec_loss_alpha=REC_LOSS_ALPHA, indep_loss_alpha=INDEP_LOSS_ALPHA,
                  distance_loss_alpha=DIST_LOSS_ALPHA, regularization_loss=FLOPS(alpha=REG_LOSS_ALPHA),
@@ -41,6 +41,8 @@ class SparserModel(L.LightningModule):
         self.slope = slope
         self.anneal_params = anneal
         self.embs_kmeans = embs_kmeans
+        self.dataset_n = dataset_n
+        self.max_iter = max_iter
 
         if prior is None:
             self.prior_dist = Normal(device=device)
@@ -80,6 +82,7 @@ class SparserModel(L.LightningModule):
         self.logv.apply(weights_init)
 
         self._training_hyperparams = [1., 1., 1., 1., 1]
+        self.training_step_count = 0
         self.training_step_outputs = []
 
     def encode(self, token_ids, token_mask):
@@ -125,7 +128,7 @@ class SparserModel(L.LightningModule):
             log_qz_i = (torch.logsumexp(log_qz_tmp, dim=1, keepdim=False) - np.log(M * N)).sum(dim=-1)
 
             return (a * log_px_z - b * (log_qz_xu - log_qz) - c * (log_qz - log_qz_i) - d * (
-                    log_qz_i - log_pz_u)).mean(), z
+                    log_qz_i - log_pz_u)).mean(), x_rec, z # TODO: remove x_rec
 
         else:
             return (log_px_z + log_pz_u - log_qz_xu).mean(), x_rec, z
@@ -142,6 +145,9 @@ class SparserModel(L.LightningModule):
             self.anneal_params = False
 
     def training_step(self, batch, batch_idx):
+        self.training_step_count += 1
+        self.anneal(self.dataset_n, self.max_iter, self.training_step_count)
+
         token_ids, token_mask = batch
         x, u = self.__encode_to_x_and_u(token_ids=token_ids, token_mask=token_mask)
 
