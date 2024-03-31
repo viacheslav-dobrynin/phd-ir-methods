@@ -13,7 +13,7 @@ import wandb
 
 
 class SparserModel(L.LightningModule):
-    def __init__(self, latent_dim, aux_dim, embs_kmeans, hidden_dim=1000,
+    def __init__(self, latent_dim, embs_kmeans, hidden_dim=1000,
 
                  rec_loss_alpha=REC_LOSS_ALPHA, indep_loss_alpha=INDEP_LOSS_ALPHA,
                  distance_loss_alpha=DIST_LOSS_ALPHA, regularization_loss=FLOPS(alpha=REG_LOSS_ALPHA),
@@ -34,7 +34,7 @@ class SparserModel(L.LightningModule):
 
         self.data_dim = self.head.config.hidden_size
         self.latent_dim = latent_dim
-        self.aux_dim = aux_dim
+        self.aux_dim = embs_kmeans.n_clusters
         self.hidden_dim = hidden_dim
         self.n_layers = n_layers
         self.activation = activation
@@ -59,14 +59,14 @@ class SparserModel(L.LightningModule):
 
         # prior_params
         self.prior_mean = torch.zeros(1).to(device)
-        self.logl = MLP(aux_dim, latent_dim, hidden_dim, n_layers, activation=activation, slope=slope, device=device)
+        self.logl = MLP(self.aux_dim, latent_dim, hidden_dim, n_layers, activation=activation, slope=slope, device=device)
         # decoder params
         self.f = MLP(latent_dim, self.data_dim, hidden_dim, n_layers, activation=activation, slope=slope, device=device)
         self.decoder_var = .01 * torch.ones(1).to(device)
         # encoder params
-        self.g = MLP(self.data_dim + aux_dim, latent_dim, hidden_dim, n_layers, activation=activation, slope=slope,
+        self.g = MLP(self.data_dim + self.aux_dim, latent_dim, hidden_dim, n_layers, activation=activation, slope=slope,
                      device=device)
-        self.logv = MLP(self.data_dim + aux_dim, latent_dim, hidden_dim, n_layers, activation=activation, slope=slope,
+        self.logv = MLP(self.data_dim + self.aux_dim, latent_dim, hidden_dim, n_layers, activation=activation, slope=slope,
                         device=device)
         # losses
         self.reconstruction_loss = ReconstructionLoss(alpha=rec_loss_alpha)
