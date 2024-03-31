@@ -147,7 +147,7 @@ class SparserModel(L.LightningModule):
         reg_loss = self.regularization_loss(z)
         dist_loss = self.distance_loss(x, z)
         indep_loss = self.indep_loss_alpha * elbo.mul(-1)
-        z_nonzero = torch.sum(torch.abs(z) >= 1e-3).float() // len(z)
+        z_nonzero = torch.sum(torch.abs(z) >= 1e-3).float() / len(z)
 
         loss = rec_loss + reg_loss + dist_loss + indep_loss
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
@@ -185,7 +185,7 @@ class SparserModel(L.LightningModule):
             f"regularization loss = {reg_loss:.2f}, " +
             f"distance loss = {dist_loss:.2f}, " +
             f"independence loss = {indep_loss:.2f}, " +
-            f"nonzero count = {z_nonzero:.2f}"
+            f"nonzero count = {z_nonzero:.0f}"
         )
         self.training_step_outputs.clear()
 
