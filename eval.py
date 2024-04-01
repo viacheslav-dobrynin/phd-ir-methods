@@ -1,6 +1,20 @@
+import os
+
 import numpy as np
-from tqdm.autonotebook import trange
+from beir import util
+from beir.datasets.data_loader import GenericDataLoader
 from beir.retrieval.search.sparse import SparseSearch
+from tqdm.autonotebook import trange
+
+
+def load_dataset(dataset="scifact"):
+    url = "https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/{}.zip".format(dataset)
+    out_dir = os.path.join(os.getcwd(), "datasets")
+    data_path = util.download_and_unzip(url, out_dir)
+    print("Dataset downloaded here: {}".format(data_path))
+    data_path = f"datasets/{dataset}"
+    corpus, queries, qrels = GenericDataLoader(data_path).load(split="test")  # or split = "train" or "dev"
+    return corpus, queries, qrels
 
 
 def build_beir_sparse_searcher(encode_fun):
