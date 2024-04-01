@@ -1,10 +1,29 @@
+import logging
 import os
 
 import numpy as np
-from beir import util
+from beir import util, LoggingHandler
 from beir.datasets.data_loader import GenericDataLoader
+from beir.retrieval.evaluation import EvaluateRetrieval
 from beir.retrieval.search.sparse import SparseSearch
 from tqdm.autonotebook import trange
+
+#### Just some code to print debug information to stdout
+#### /print debug information to stdout
+logging.basicConfig(format='%(asctime)s - %(message)s',
+                    datefmt='%Y-%m-%d %H:%M:%S',
+                    level=logging.INFO,
+                    handlers=[LoggingHandler()],
+                    force=True)
+
+
+def eval_model(encode_fun, corpus, queries, qrels):
+    beir_sparse_model = _build_beir_sparse_searcher(encode_fun=encode_fun)
+    retriever = EvaluateRetrieval(beir_sparse_model, score_function="dot")
+    results = retriever.retrieve(corpus, queries, query_weights=True)
+    logging.info("Retriever evaluation with k in: {}".format(retriever.k_values))
+    ndcg, _map, recall, precision = retriever.evaluate(qrels, results, retriever.k_values)
+    return ndcg, _map, recall, precision
 
 
 def load_dataset(dataset="scifact"):
@@ -12,12 +31,11 @@ def load_dataset(dataset="scifact"):
     out_dir = os.path.join(os.getcwd(), "datasets")
     data_path = util.download_and_unzip(url, out_dir)
     print("Dataset downloaded here: {}".format(data_path))
-    data_path = f"datasets/{dataset}"
     corpus, queries, qrels = GenericDataLoader(data_path).load(split="test")  # or split = "train" or "dev"
     return corpus, queries, qrels
 
 
-def build_beir_sparse_searcher(encode_fun):
+def _build_beir_sparse_searcher(encode_fun):
     return SparseSearch(model=_SparseEncoderModel(encode_fun=encode_fun))  # batch_size=10
 
 
