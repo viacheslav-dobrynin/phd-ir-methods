@@ -1,22 +1,23 @@
 import numpy as np
-import torch
 import pytorch_lightning as L
+import torch
+import wandb
+from transformers import AutoModel
 
 from ivae.model import Normal, MLP, weights_init
-from loss import ReconstructionLoss, DistanceLoss, FLOPS
-from params import (HEAD_MODEL_ID, LEARNING_RATE, INDEP_LOSS_ALPHA,
-                    REC_LOSS_ALPHA, DIST_LOSS_ALPHA, REG_LOSS_ALPHA,
+from loss import DistanceLoss, FLOPS
+from params import (HEAD_MODEL_ID, LEARNING_RATE, ELBO_LOSS_ALPHA,
+                    DIST_LOSS_ALPHA, REG_LOSS_ALPHA,
                     LOG_EVERY)
 from pooling import mean_pooling
-from transformers import AutoModel
-import wandb
 
 
 class SparserModel(L.LightningModule):
     def __init__(self, latent_dim, embs_kmeans, dataset_n, max_iter, hidden_dim=1000,
 
-                 rec_loss_alpha=REC_LOSS_ALPHA, indep_loss_alpha=INDEP_LOSS_ALPHA,
-                 distance_loss_alpha=DIST_LOSS_ALPHA, regularization_loss=FLOPS(alpha=REG_LOSS_ALPHA),
+                 elbo_loss_alpha=ELBO_LOSS_ALPHA,
+                 distance_loss_alpha=DIST_LOSS_ALPHA,
+                 regularization_loss=FLOPS(alpha=REG_LOSS_ALPHA),
 
                  prior=None, decoder=None, encoder=None,
 
@@ -71,10 +72,9 @@ class SparserModel(L.LightningModule):
         self.logv = MLP(self.data_dim + self.aux_dim, latent_dim, hidden_dim, n_layers, activation=activation, slope=slope,
                         device=device)
         # losses
-        self.reconstruction_loss = ReconstructionLoss(alpha=rec_loss_alpha)
+        self.elbo_loss_alpha = elbo_loss_alpha
         self.regularization_loss = regularization_loss
         self.distance_loss = DistanceLoss(alpha=distance_loss_alpha)
-        self.indep_loss_alpha = indep_loss_alpha
 
         self.logl.apply(weights_init)
         self.f.apply(weights_init)
@@ -152,29 +152,26 @@ class SparserModel(L.LightningModule):
         x, u = self.__encode_to_x_and_u(token_ids=token_ids, token_mask=token_mask)
 
         elbo, x_rec, z = self.elbo(x, u)
-        rec_loss = self.reconstruction_loss(x, x_rec)
+        elbo_loss = self.elbo_loss_alpha * elbo.mul(-1)
         reg_loss = self.regularization_loss(z)
         dist_loss = self.distance_loss(x, z)
-        indep_loss = self.indep_loss_alpha * elbo.mul(-1)
         z_nonzero = torch.sum(torch.abs(z) >= 1e-3).float() / len(z)
 
-        loss = rec_loss + reg_loss + dist_loss + indep_loss
+        loss = elbo_loss + reg_loss + dist_loss
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
         outs = {
             "loss": loss,
-            "rec_loss": rec_loss,
+            "elbo_loss": elbo_loss,
             "reg_loss": reg_loss,
             "dist_loss": dist_loss,
-            "indep_loss": indep_loss,
             "z_nonzero": z_nonzero,
         }
         self.training_step_outputs.append(outs)
         if batch_idx % LOG_EVERY == 0:
             wandb.log({'loss': loss})
-            wandb.log({'reconstruction loss': rec_loss.detach().clone()})
+            wandb.log({'elbo loss': elbo_loss.detach().clone()})
             wandb.log({'regularization loss': reg_loss.detach().clone()})
             wandb.log({'distance loss': dist_loss.detach().clone()})
-            wandb.log({'independence loss': indep_loss.detach().clone()})
             wandb.log({'nonzero count': z_nonzero.detach().clone()})
 
         return loss
@@ -182,18 +179,16 @@ class SparserModel(L.LightningModule):
     def on_train_epoch_end(self):
         outs = self.training_step_outputs
         loss = torch.stack([out['loss'] for out in outs]).mean()
-        rec_loss = torch.stack([out['rec_loss'] for out in outs]).mean()
+        elbo_loss = torch.stack([out['elbo_loss'] for out in outs]).mean()
         reg_loss = torch.stack([out['reg_loss'] for out in outs]).mean()
         dist_loss = torch.stack([out['dist_loss'] for out in outs]).mean()
-        indep_loss = torch.stack([out['indep_loss'] for out in outs]).mean()
         z_nonzero = torch.stack([out['z_nonzero'] for out in outs]).mean()
 
         print(
             f"loss = {loss:.2f}: " +
-            f"reconstruction loss = {rec_loss:.2f}, " +
+            f"elbo loss = {elbo_loss:.2f}, " +
             f"regularization loss = {reg_loss:.2f}, " +
             f"distance loss = {dist_loss:.2f}, " +
-            f"independence loss = {indep_loss:.2f}, " +
             f"nonzero count = {z_nonzero:.0f}"
         )
         self.training_step_outputs.clear()
