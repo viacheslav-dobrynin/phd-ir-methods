@@ -189,7 +189,8 @@ class SparserModel(L.LightningModule):
             f"elbo loss = {elbo_loss:.2f}, " +
             f"regularization loss = {reg_loss:.2f}, " +
             f"distance loss = {dist_loss:.2f}, " +
-            f"nonzero count = {z_nonzero:.0f}"
+            f"nonzero count = {z_nonzero:.0f}, " +
+            f"training hyperparams = {self._training_hyperparams}"
         )
         self.training_step_outputs.clear()
 
