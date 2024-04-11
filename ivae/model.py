@@ -6,7 +6,7 @@ from torch import distributions as dist
 from torch import nn
 from torch.nn import functional as F
 
-from params import HEAD_MODEL_ID
+from params import BACKBONE_MODEL_ID
 from pooling import mean_pooling
 from transformers import AutoModel
 
@@ -143,11 +143,11 @@ class iVAE(nn.Module):
     def __init__(self, latent_dim, data_dim, aux_dim, prior=None, decoder=None, encoder=None,
                  n_layers=3, hidden_dim=50, activation='lrelu', slope=.1, device='cpu', anneal=False):
         super().__init__()
-        head = AutoModel.from_pretrained(HEAD_MODEL_ID).to(device)
-        head.eval()
-        for p in head.parameters():
+        backbone = AutoModel.from_pretrained(BACKBONE_MODEL_ID).to(device)
+        backbone.eval()
+        for p in backbone.parameters():
             p.requires_grad = False
-        self.head = head
+        self.backbone = backbone
 
         self.data_dim = data_dim
         self.latent_dim = latent_dim
@@ -242,7 +242,7 @@ class iVAE(nn.Module):
             self.anneal_params = False
 
     def encode_to_x_and_u(self, token_ids, token_mask):
-        x = self.head(input_ids=token_ids, attention_mask=token_mask)
+        x = self.backbone(input_ids=token_ids, attention_mask=token_mask)
         x = mean_pooling(model_output=x, attention_mask=token_mask)
         u = (token_ids + 1).log()
         return x, u

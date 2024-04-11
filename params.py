@@ -2,7 +2,7 @@
 MAX_LENGTH = 512
 
 # MODEL PARAMS
-HEAD_MODEL_ID = "sentence-transformers/msmarco-distilbert-dot-v5"
+BACKBONE_MODEL_ID = "sentence-transformers/msmarco-distilbert-dot-v5"
 
 # TRAINING PARAMS
 ELBO_LOSS_ALPHA = 1.0

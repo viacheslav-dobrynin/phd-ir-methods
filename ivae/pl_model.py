@@ -6,7 +6,7 @@ from transformers import AutoModel
 
 from ivae.model import Normal, MLP, weights_init
 from loss import DistanceLoss, FLOPS
-from params import (HEAD_MODEL_ID, LEARNING_RATE, ELBO_LOSS_ALPHA,
+from params import (BACKBONE_MODEL_ID, LEARNING_RATE, ELBO_LOSS_ALPHA,
                     DIST_LOSS_ALPHA, REG_LOSS_ALPHA,
                     LOG_EVERY)
 from pooling import mean_pooling
@@ -27,13 +27,13 @@ class SparserModel(L.LightningModule):
 
         super().__init__()
         self.save_hyperparameters()
-        head = AutoModel.from_pretrained(HEAD_MODEL_ID).to(device)
-        head.eval()
-        for p in head.parameters():
+        backbone = AutoModel.from_pretrained(BACKBONE_MODEL_ID).to(device)
+        backbone.eval()
+        for p in backbone.parameters():
             p.requires_grad = False
-        self.head = head
+        self.backbone = backbone
 
-        self.data_dim = self.head.config.hidden_size
+        self.data_dim = self.backbone.config.hidden_size
         self.latent_dim = latent_dim
         self.aux_dim = embs_kmeans.n_clusters
         self.hidden_dim = hidden_dim
@@ -199,7 +199,7 @@ class SparserModel(L.LightningModule):
         return optimizer
 
     def __encode_to_x_and_u(self, token_ids, token_mask):
-        x = self.head(input_ids=token_ids, attention_mask=token_mask)
+        x = self.backbone(input_ids=token_ids, attention_mask=token_mask)
         x = mean_pooling(model_output=x, attention_mask=token_mask)
         labels = self.embs_kmeans.predict(x)
         u = torch.nn.functional.one_hot(labels, num_classes=self.aux_dim).float()
