@@ -1,8 +1,6 @@
 import nltk
 import pandas as pd
-from nltk import RegexpTokenizer
-from nltk.stem import WordNetLemmatizer
-from nltk.corpus import reuters, stopwords
+from nltk.corpus import reuters
 from torch.utils.data import Dataset, DataLoader
 
 from eval import load_dataset
@@ -16,33 +14,12 @@ nltk.download('wordnet')
 class DocDataset(Dataset):
     def __init__(self, X, tokenizer, max_length=MAX_LENGTH):
         super().__init__()
-
-        self.tokenizer = tokenizer
-        self.lemmatizer = WordNetLemmatizer()
-        self.tokenizer_simple = RegexpTokenizer(r'\w+')
-        self.max_length = max_length
-        self.vocabulary, self.preprocessed_docs = [], []
-        self.stops = set(stopwords.words("english"))
-
         self.docs = X
-        for doc in self.docs:
-            self.vocabulary.append(self.filter_doc(doc))
-            self.preprocessed_docs.append(" ".join(self.filter_doc(doc)))
-
         self.tokenized_docs = tokenizer(self.docs,
                                         return_tensors="pt",
                                         padding='max_length',
                                         truncation=True,
                                         max_length=max_length)
-
-    def filter_doc(self, doc):
-        words = self.tokenizer_simple.tokenize(doc)
-        filtered_words = []
-        for word in words:
-            lemmatized = self.lemmatizer.lemmatize(word.lower())
-            if lemmatized not in self.stops and not lemmatized.isdigit():
-                filtered_words.append(lemmatized)
-        return filtered_words
 
     def __len__(self):
         return len(self.docs)
@@ -82,7 +59,7 @@ def get_corpus():
 def get_dataloader(tokenizer):
     corpus = get_corpus()
     # Create dataset and dataloader
-    dataset = DocDataset(corpus, tokenizer) # corpus
+    dataset = DocDataset(corpus, tokenizer)
     dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
     # anneal params
     dataset_n = len(dataset)
