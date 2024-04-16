@@ -1,10 +1,12 @@
 import nltk
+import pandas as pd
 from nltk import RegexpTokenizer
 from nltk.stem import WordNetLemmatizer
 from nltk.corpus import reuters, stopwords
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 
-from params import MAX_LENGTH
+from eval import load_dataset
+from params import MAX_LENGTH, DATASET, BATCH_SIZE, EPOCHS
 
 nltk.download('stopwords')
 nltk.download('reuters')
@@ -56,3 +58,35 @@ def get_reuters_raw(num_doc=100):
     else:
         corpus = [reuters.raw(file_list[i]) for i in range(len(file_list))]
     return corpus
+
+
+def get_corpus():
+    if DATASET == "reuters":
+        corpus = get_reuters_raw(num_doc=None)
+        corpus_df = pd.DataFrame(corpus, columns=["Text"])
+        corpus = corpus_df["Text"].drop_duplicates().values.tolist()
+    elif "msmarco" in DATASET:
+        corpus_all, _, _ = load_dataset(dataset="msmarco")
+        count = int(DATASET.split('_')[1])
+        corpus_gen = (value for i, value in enumerate(corpus_all.values()) if i < count)
+        sep = " "
+        corpus = [(doc["title"] + sep + doc["text"]).strip() for doc in corpus_gen]
+        del corpus_gen
+        del corpus_all
+    else:
+        raise ValueError("Unknown dataset:", DATASET)
+
+    return corpus
+
+
+def get_dataloader(tokenizer):
+    corpus = get_corpus()
+    # Create dataset and dataloader
+    dataset = DocDataset(corpus, tokenizer) # corpus
+    dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
+    # anneal params
+    dataset_n = len(dataset)
+    max_iter = len(dataloader) * EPOCHS
+    print(f'{dataset_n=}')
+    print(f'{max_iter=}')
+    return dataloader, dataset_n, max_iter
