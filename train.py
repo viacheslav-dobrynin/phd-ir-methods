@@ -18,33 +18,32 @@ from util import create_model_name
 
 
 def fit_kmeans(embs):
-    match K_MEANS_LIB:
-        case "fast_pytorch_kmeans":
-            import fast_pytorch_kmeans
-            kmeans = fast_pytorch_kmeans.KMeans(
-                n_clusters=NUM_CLUSTERS,
-                init_method="kmeans++",
-                max_iter=300,
-                minibatch=1000)
-            kmeans.fit(embs)
-            return kmeans
-        case "torch_kmeans":
-            import torch_kmeans
-            kmeans = torch_kmeans.KMeans(
-                n_clusters=NUM_CLUSTERS,
-                init_method='k-means++',
-                max_iter=300)
-            # torch.stack(embs.split(split_size=100)[:-1])
-            # kmeans.fit(torch.stack(embs[:3000].split(split_size=100)[:-1]))
-            kmeans.fit(embs.unsqueeze(0))
-            return kmeans
-        case "sklearn":
-            import sklearn
-            kmeans = sklearn.cluster.KMeans(n_clusters=NUM_CLUSTERS)
-            kmeans.fit(embs)
-            return kmeans
-        case _:
-            raise ValueError("Unknown k-means lib:", K_MEANS_LIB)
+    if K_MEANS_LIB == "fast_pytorch_kmeans":
+        import fast_pytorch_kmeans
+        kmeans = fast_pytorch_kmeans.KMeans(
+            n_clusters=NUM_CLUSTERS,
+            init_method="kmeans++",
+            max_iter=300,
+            minibatch=1000)
+        kmeans.fit(embs)
+        return kmeans
+    elif K_MEANS_LIB == "torch_kmeans":
+        import torch_kmeans
+        kmeans = torch_kmeans.KMeans(
+            n_clusters=NUM_CLUSTERS,
+            init_method='k-means++',
+            max_iter=300)
+        # torch.stack(embs.split(split_size=100)[:-1])
+        # kmeans.fit(torch.stack(embs[:3000].split(split_size=100)[:-1]))
+        kmeans.fit(embs.unsqueeze(0))
+        return kmeans
+    elif K_MEANS_LIB == "sklearn":
+        import sklearn
+        kmeans = sklearn.cluster.KMeans(n_clusters=NUM_CLUSTERS)
+        kmeans.fit(embs)
+        return kmeans
+    else:
+        raise ValueError("Unknown k-means lib:", K_MEANS_LIB)
 
 
 def get_kmeans(dataloader):
