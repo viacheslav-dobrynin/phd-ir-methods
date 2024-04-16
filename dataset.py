@@ -1,9 +1,12 @@
+import os
+
 import nltk
 import pandas as pd
+from beir import util
+from beir.datasets.data_loader import GenericDataLoader
 from nltk.corpus import reuters
 from torch.utils.data import Dataset, DataLoader
 
-from eval import load_dataset
 from params import MAX_LENGTH, DATASET, BATCH_SIZE, EPOCHS
 
 nltk.download('stopwords')
@@ -35,6 +38,15 @@ def get_reuters_raw(num_doc=100):
     else:
         corpus = [reuters.raw(file_list[i]) for i in range(len(file_list))]
     return corpus
+
+
+def load_dataset(dataset="scifact"):
+    url = "https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/{}.zip".format(dataset)
+    out_dir = os.path.join(os.getcwd(), "datasets")
+    data_path = util.download_and_unzip(url, out_dir)
+    print("Dataset downloaded here: {}".format(data_path))
+    corpus, queries, qrels = GenericDataLoader(data_path).load(split="test")  # or split = "train" or "dev"
+    return corpus, queries, qrels
 
 
 def get_corpus():
