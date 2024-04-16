@@ -11,7 +11,8 @@ from dataset import get_dataloader
 from ivae.pl_model import SparserModel
 from loss import FLOPS
 from params import (K_MEANS_LIB, NUM_CLUSTERS, KMEANS_FILE, EMBS_FILE, BACKBONE_MODEL_ID, DEVICE, SEED,
-                    REG_LOSS_ALPHA, LATENT_SIZE, HIDDEN_DIM, ELBO_LOSS_ALPHA, DIST_LOSS_ALPHA, ANNEAL, PROJECT, EPOCHS)
+                    REG_LOSS_ALPHA, LATENT_SIZE, HIDDEN_DIM, ELBO_LOSS_ALPHA, DIST_LOSS_ALPHA, ANNEAL, PROJECT, EPOCHS,
+                    DEVICES)
 from pooling import mean_pooling
 from util import create_model_name
 
@@ -78,7 +79,7 @@ def get_kmeans(dataloader):
             # embs = np.concatenate(emb_batches)
             embs = torch.cat(emb_batches)
 
-        # print('Embs created:', embs.shape)
+        print('Embs created:', embs.shape)
         # with open(embs_file, 'wb') as f:
         #   pickle.dump(embs, f)
 
@@ -93,6 +94,13 @@ def get_kmeans(dataloader):
         del backbone
 
     return kmeans
+
+
+def get_trainer(logger):
+    if DEVICES:
+        return L.Trainer(max_epochs=EPOCHS, devices=DEVICES, logger=logger)
+    else:
+        return L.Trainer(max_epochs=EPOCHS, logger=logger)
 
 
 def train():
@@ -118,6 +126,6 @@ def train():
         model_name = create_model_name(model=model, desc=desc)
         wandb.init(project=PROJECT, name=model_name)  # mode="disabled"
         wandb_logger = L.loggers.WandbLogger(project=PROJECT, log_model=True, name=model_name, id=model_name)
-        trainer = L.Trainer(max_epochs=EPOCHS, logger=wandb_logger)
+        trainer = get_trainer(logger=wandb_logger)
         trainer.fit(model=model, train_dataloaders=dataloader)
         wandb.finish()

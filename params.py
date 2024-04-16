@@ -23,5 +23,6 @@ NUM_CLUSTERS = 25 # for k-means
 ANNEAL = True
 PROJECT = "Algorithm (iVAE)"
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+DEVICES = None # 'auto' is default
 KMEANS_FILE = f'/content/drive/MyDrive/ITMO/Аспирантура/Диссертация/Алгоритм/kmeans_n{NUM_CLUSTERS}_{DATASET}_{K_MEANS_LIB}.pickle'
 EMBS_FILE = f'/content/drive/MyDrive/ITMO/Аспирантура/Диссертация/Алгоритм/embs_{DATASET}_{DEVICE.type}.pickle'
