@@ -2,6 +2,13 @@ import sklearn
 from matplotlib import pyplot as plt
 
 
+def print_params():
+    import params
+    for param in dir(params):
+        if param.isupper():
+            print(f'{param}:', getattr(params, param))
+
+
 def plot_elbow_method(embs):
     sum_of_squared_distances = []
     K = range(2, 50, 5)
