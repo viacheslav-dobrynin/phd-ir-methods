@@ -15,17 +15,17 @@ nltk.download('wordnet')
 
 
 class DocDataset(Dataset):
-    def __init__(self, X, tokenizer, max_length=MAX_LENGTH):
+    def __init__(self, docs, tokenizer, max_length=MAX_LENGTH):
         super().__init__()
-        self.docs = X
-        self.tokenized_docs = tokenizer(self.docs,
+        self.docs_len = len(docs)
+        self.tokenized_docs = tokenizer(docs,
                                         return_tensors="pt",
                                         padding='max_length',
                                         truncation=True,
                                         max_length=max_length)
 
     def __len__(self):
-        return len(self.docs)
+        return self.docs_len
 
     def __getitem__(self, item):
         return self.tokenized_docs['input_ids'][item], self.tokenized_docs['attention_mask'][item]
@@ -73,6 +73,7 @@ def get_dataloader(tokenizer):
     # Create dataset and dataloader
     dataset = DocDataset(corpus, tokenizer)
     dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
+    del corpus
     # anneal params
     dataset_n = len(dataset)
     max_iter = len(dataloader) * EPOCHS
