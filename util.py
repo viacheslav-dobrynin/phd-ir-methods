@@ -37,14 +37,9 @@ def create_model_name(model, desc=""):
 
 
 def build_encode_sparse_fun(tokenizer, model, threshold, zeroing_type="quantile"):
-    def encode_sparse(docs: list[str]):
-        tokenized = tokenizer(docs,
-                              return_tensors="pt",
-                              padding='max_length',
-                              truncation=True,
-                              max_length=MAX_LENGTH).to(DEVICE)
+    def encode_sparse_from_tokens(token_ids, token_mask):
         with torch.no_grad():
-            z = model.encode(token_ids=tokenized["input_ids"], token_mask=tokenized["attention_mask"])
+            z = model.encode(token_ids=token_ids, token_mask=token_mask)
             if threshold is not None:
                 if zeroing_type == "quantile":
                     q = torch.quantile(z, torch.tensor([threshold, 1.0 - threshold]).to(DEVICE), dim=1, keepdim=True)
@@ -55,7 +50,15 @@ def build_encode_sparse_fun(tokenizer, model, threshold, zeroing_type="quantile"
                     raise ValueError(f"Zeroing type '{zeroing_type}' not supported")
         return z
 
-    return encode_sparse
+    def encode_sparse_from_docs(docs: list[str]):
+        tokenized = tokenizer(docs,
+                              return_tensors="pt",
+                              padding='max_length',
+                              truncation=True,
+                              max_length=MAX_LENGTH).to(DEVICE)
+        return encode_sparse_from_tokens(token_ids=tokenized["input_ids"], token_mask=tokenized["attention_mask"])
+
+    return encode_sparse_from_docs if tokenizer else encode_sparse_from_tokens
 
 
 def build_encode_dense_fun(tokenizer, model):
