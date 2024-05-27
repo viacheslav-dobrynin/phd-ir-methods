@@ -15,8 +15,8 @@ logging.basicConfig(format='%(asctime)s - %(message)s',
                     force=True)
 
 
-def eval_model(encode_fun, corpus, queries, qrels, metric=None):
-    beir_sparse_model = _build_beir_sparse_searcher(encode_fun=encode_fun)
+def eval_model(encode_fun, corpus, queries, qrels, batch_size=100, metric=None):
+    beir_sparse_model = _build_beir_sparse_searcher(encode_fun=encode_fun, batch_size=batch_size)
     retriever = EvaluateRetrieval(beir_sparse_model, score_function="dot")
     results = retriever.retrieve(corpus, queries, query_weights=True)
     logging.info("Retriever evaluation with k in: {}".format(retriever.k_values))
@@ -26,9 +26,8 @@ def eval_model(encode_fun, corpus, queries, qrels, metric=None):
         return retriever.evaluate(qrels, results, retriever.k_values)
 
 
-def _build_beir_sparse_searcher(encode_fun):
-    return SparseSearch(model=_SparseEncoderModel(encode_fun=encode_fun))  # batch_size=10
-
+def _build_beir_sparse_searcher(encode_fun, batch_size):
+    return SparseSearch(model=_SparseEncoderModel(encode_fun=encode_fun), batch_size=batch_size)
 
 class _SparseEncoderModel:
     def __init__(self, encode_fun):
