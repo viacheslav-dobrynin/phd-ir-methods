@@ -21,7 +21,7 @@ class SparserModel(L.LightningModule):
 
                  prior=None, decoder=None, encoder=None,
 
-                 n_layers=3, activation='lrelu', slope=.1,
+                 n_layers=3, activation='lrelu', slope=.1, # TODO: try slope=0.01
 
                  device='cpu', anneal=False):
 
@@ -200,7 +200,7 @@ class SparserModel(L.LightningModule):
 
     def __encode_to_x_and_u(self, token_ids, token_mask):
         x = self.backbone(input_ids=token_ids, attention_mask=token_mask)
-        x = mean_pooling(model_output=x, attention_mask=token_mask)
+        x = mean_pooling(model_output=x, attention_mask=token_mask) # TODO: try pool sparse embeddings
         labels = self.embs_kmeans.predict(x)
         u = torch.nn.functional.one_hot(labels, num_classes=self.aux_dim).float()
         return x, u
