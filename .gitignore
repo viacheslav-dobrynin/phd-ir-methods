@@ -1,5 +1,7 @@
 .DS_Store
 .idea
+.gradle
+build
 .ipynb_checkpoints/
 .vscode
 __pycache__/
