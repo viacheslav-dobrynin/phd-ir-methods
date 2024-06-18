@@ -1,5 +1,6 @@
 package ru.itmo.sparsifiermodel.query;
 
+import org.apache.lucene.index.DocValues;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.NumericDocValues;
 import org.apache.lucene.search.*;
@@ -23,7 +24,7 @@ public class FieldValueAsScoreQuery extends Query {
         return new Weight(this) {
             @Override
             public boolean isCacheable(LeafReaderContext ctx) {
-                throw new UnsupportedOperationException();
+                return DocValues.isCacheable(ctx, field);
             }
 
             @Override
