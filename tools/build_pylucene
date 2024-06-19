@@ -1,0 +1,35 @@
+#!/bin/bash
+
+# Initialize
+pylucene_version=9.10.0
+pylucene=pylucene-$pylucene_version
+pylucene_file=${pylucene}-src.tar.gz
+is_install_jvm=false
+
+# Build
+if [  -f "$pylucene_file" ] ; then
+  echo "PyLucene file already downloaded"
+else
+  wget https://dlcdn.apache.org/lucene/pylucene/$pylucene_file
+  tar xzf $pylucene_file
+fi
+if [ "$is_install_jvm" = true ] ; then
+  echo "TODO: add jvm installing"
+fi
+
+cp ../inverted-index/src/main/java/ru/itmo/sparsifiermodel/query/FieldValueAsScoreQuery.java \
+  $pylucene/lucene-java-$pylucene_version/lucene/extensions/src/java/org/apache/pylucene/queries/
+
+cd $pylucene/jcc || exit
+python3 setup.py build
+python3 setup.py install
+cd ..
+
+export PYTHON_PATH=$(which python3)
+export PREFIX_PYTHON=${PYTHON_PATH%/bin/python3}
+export PYTHON=$PYTHON_PATH
+export JCC="$PYTHON -m jcc.__main__ --shared --arch x86_64"
+export NUM_FILES=4
+make
+make install
+make test
