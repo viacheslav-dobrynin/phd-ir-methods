@@ -4,7 +4,7 @@
 pylucene_version=9.10.0
 pylucene=pylucene-$pylucene_version
 pylucene_file=${pylucene}-src.tar.gz
-is_install_jvm=false
+is_install_jvm=true
 
 # Build
 if [  -f "$pylucene_file" ] ; then
@@ -14,7 +14,18 @@ else
   tar xzf $pylucene_file
 fi
 if [ "$is_install_jvm" = true ] ; then
-  echo "TODO: add jvm installing"
+  if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+    echo "Linux detected. Install temurin-17-jdk"
+    apt -q install -y wget apt-transport-https gpg
+    wget -qO - https://packages.adoptium.net/artifactory/api/gpg/key/public | gpg --dearmor | tee /etc/apt/trusted.gpg.d/adoptium.gpg > /dev/null
+    echo "deb https://packages.adoptium.net/artifactory/deb $(awk -F= '/^VERSION_CODENAME/{print$2}' /etc/os-release) main" | tee /etc/apt/sources.list.d/adoptium.list
+    apt -q update # update if you haven't already
+    apt -q install temurin-17-jdk
+  elif [[ "$OSTYPE" == "darwin"* ]]; then
+    echo "Mac OS detected. Skip JVM installation."
+  else
+    echo "Unknown OS type: $OSTYPE. Skip JVM installation."
+  fi
 fi
 
 cp ../inverted-index/src/main/java/ru/itmo/sparsifiermodel/query/FieldValueAsScoreQuery.java \
