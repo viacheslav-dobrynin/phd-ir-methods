@@ -14,43 +14,52 @@ from util.path import delete_folder
 from util.field import to_field_name
 from util.search import build_query
 
-lucene.initVM()
 
-analyzer = StandardAnalyzer()
-index = "./runs/inverted_index"
-delete_folder(index)
-indexPath = Paths.get(index)
-directory = FSDirectory.open(indexPath)
-config = IndexWriterConfig(analyzer)
-writer = IndexWriter(directory, config)
+class Runner:
+    def __init__(self):
+        lucene.initVM()
+        self.analyzer = StandardAnalyzer()
+        self.index_path = "./runs/inverted_index"
+        self.index_jpath = Paths.get(self.index_path)
+        self.corpus, self.queries, self.qrels = load_dataset()
 
-corpus, queries, qrels = load_dataset()
-corpus = {doc_id: (doc["title"] + " " + doc["text"]).strip() for doc_id, doc in corpus.items()}
-batch_size = 100
-encode = None
-corpus_items = corpus.items()
-for start_idx in trange(0, len(corpus), batch_size, desc="docs"):
-    batch = tuple(itertools.islice(corpus_items, start_idx, start_idx + batch_size))
-    doc_ids, docs = list(zip(*batch))
+    def index(self):
+        delete_folder(self.index_path)
+        config = IndexWriterConfig(self.analyzer)
+        writer = IndexWriter(FSDirectory.open(self.index_jpath), config)
 
-for doc_id, emb in enumerate([[0.0, 3.5, 0.0], [4.5, 0.0, 5.5], [0.0, 6.5, 0.0]]):
-    doc = Document()
-    doc.add(StringField("doc_id", str(doc_id), Field.Store.YES))
-    for i, value in enumerate(emb):
-        if value != 0.0:
-            doc.add(FloatDocValuesField(to_field_name(i), value))
-    writer.addDocument(doc)
-writer.close()
+        corpus = {doc_id: (doc["title"] + " " + doc["text"]).strip() for doc_id, doc in self.corpus.items()}
+        batch_size = 100
+        encode = None
+        corpus_items = corpus.items()
+        for start_idx in trange(0, len(corpus), batch_size, desc="docs"):
+            batch = tuple(itertools.islice(corpus_items, start_idx, start_idx + batch_size))
+            doc_ids, docs = list(zip(*batch))
 
-reader = DirectoryReader.open(FSDirectory.open(indexPath))
-searcher = IndexSearcher(reader)
-query = build_query([1.0, 2.0, 0.0])
+        for doc_id, emb in enumerate([[0.0, 3.5, 0.0], [4.5, 0.0, 5.5], [0.0, 6.5, 0.0]]):
+            doc = Document()
+            doc.add(StringField("doc_id", str(doc_id), Field.Store.YES))
+            for i, value in enumerate(emb):
+                if value != 0.0:
+                    doc.add(FloatDocValuesField(to_field_name(i), value))
+            writer.addDocument(doc)
+        writer.close()
 
-hits = searcher.search(query, 10).scoreDocs
-storedFields = searcher.storedFields()
-for hit in hits:
-    hitDoc = storedFields.document(hit.doc)
-    print(f"{hitDoc=}, {hit.score=}, {hitDoc['doc_id']=}")
+    def search(self):
+        reader = DirectoryReader.open(FSDirectory.open(self.index_jpath))
+        searcher = IndexSearcher(reader)
+        query = build_query([1.0, 2.0, 0.0])
 
-reader.close()
-directory.close()
+        hits = searcher.search(query, 10).scoreDocs
+        storedFields = searcher.storedFields()
+        for hit in hits:
+            hitDoc = storedFields.document(hit.doc)
+            print(f"{hitDoc=}, {hit.score=}, {hitDoc['doc_id']=}")
+
+        reader.close()
+
+
+if __name__ == '__main__':
+    runner = Runner()
+    runner.index()
+    runner.search()
