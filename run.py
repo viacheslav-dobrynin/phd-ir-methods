@@ -51,15 +51,19 @@ class Runner:
     def search(self):
         reader = DirectoryReader.open(FSDirectory.open(self.index_jpath))
         searcher = IndexSearcher(reader)
-        query = build_query([1.0, 2.0, 0.0])
-
-        hits = searcher.search(query, 10).scoreDocs
-        storedFields = searcher.storedFields()
-        for hit in hits:
-            hitDoc = storedFields.document(hit.doc)
-            print(f"{hitDoc=}, {hit.score=}, {hitDoc['doc_id']=}")
-
+        results = {}
+        query_ids = list(self.queries.keys())
+        for query_id in query_ids:
+            query_emb = self.encode([self.queries[query_id]])[0]
+            hits = searcher.search(build_query(query_emb), 10).scoreDocs
+            stored_fields = searcher.storedFields()
+            query_result = {}
+            for hit in hits:
+                hit_doc = stored_fields.document(hit.doc)
+                query_result[hit_doc["doc_id"]] = hit.score
+            results[query_id] = query_result
         reader.close()
+        return results
 
     def delete_index(self):
         delete_folder(self.index_path)
@@ -69,4 +73,5 @@ if __name__ == '__main__':
     runner = Runner(encode_fun=lambda docs: torch.tensor([[12.0, .0, 15.0], [.0, 4.0, .0], [20.0, 30.5, .0]]))
     runner.delete_index()
     runner.index()
-    runner.search()
+    search_results = runner.search()
+    print(f"{search_results=}")
