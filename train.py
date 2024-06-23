@@ -14,7 +14,7 @@ from params import (K_MEANS_LIB, NUM_CLUSTERS, KMEANS_FILE, EMBS_FILE, BACKBONE_
                     REG_LOSS_ALPHA, LATENT_SIZE, HIDDEN_DIM, ELBO_LOSS_ALPHA, DIST_LOSS_ALPHA, ANNEAL, PROJECT, EPOCHS,
                     DEVICES)
 from pooling import mean_pooling
-from util import create_model_name
+from util.model import create_model_name
 
 
 def fit_kmeans(embs):

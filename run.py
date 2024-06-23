@@ -1,37 +1,18 @@
-import os
-import shutil
+import itertools
 
 import lucene
 from java.nio.file import Paths
 from org.apache.lucene.analysis.standard import StandardAnalyzer
 from org.apache.lucene.document import Document, FloatDocValuesField, StringField, Field
 from org.apache.lucene.index import DirectoryReader, IndexWriterConfig, IndexWriter
-from org.apache.lucene.search import BooleanClause, BooleanQuery, BoostQuery, IndexSearcher
+from org.apache.lucene.search import IndexSearcher
 from org.apache.lucene.store import FSDirectory
-from ru.itmo.sparsifiermodel.query import FieldValueAsScoreQuery
+from tqdm.autonotebook import trange
 
 from dataset import load_dataset
-
-
-def delete_folder(path):
-    if os.path.exists(path):
-        shutil.rmtree(path)
-        print(f"The folder '{path}' and its contents have been successfully deleted.")
-    else:
-        print(f"The folder '{path}' does not exist.")
-
-
-def to_field_name(i):
-    return f"term_{i}"
-
-
-def build_query(query):
-    builder = BooleanQuery.Builder()
-    for i, value in enumerate(query):
-        if value != 0.0:
-            builder.add(BoostQuery(FieldValueAsScoreQuery(to_field_name(i)), value), BooleanClause.Occur.SHOULD)
-    return builder.build()
-
+from util.path import delete_folder
+from util.field import to_field_name
+from util.search import build_query
 
 lucene.initVM()
 
@@ -44,10 +25,13 @@ config = IndexWriterConfig(analyzer)
 writer = IndexWriter(directory, config)
 
 corpus, queries, qrels = load_dataset()
-doc_ids = list(corpus.keys())
-query_ids = list(queries.keys())
-documents = [corpus[doc_id] for doc_id in doc_ids]
-sentences = [(doc["title"] + " " + doc["text"]).strip() for doc in documents]
+corpus = {doc_id: (doc["title"] + " " + doc["text"]).strip() for doc_id, doc in corpus.items()}
+batch_size = 100
+encode = None
+corpus_items = corpus.items()
+for start_idx in trange(0, len(corpus), batch_size, desc="docs"):
+    batch = tuple(itertools.islice(corpus_items, start_idx, start_idx + batch_size))
+    doc_ids, docs = list(zip(*batch))
 
 for doc_id, emb in enumerate([[0.0, 3.5, 0.0], [4.5, 0.0, 5.5], [0.0, 6.5, 0.0]]):
     doc = Document()

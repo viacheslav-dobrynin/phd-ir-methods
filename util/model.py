@@ -1,32 +1,7 @@
-import itertools
-
-import sklearn
 import torch
-from matplotlib import pyplot as plt
 
-from params import MAX_LENGTH, DEVICE
+from params import DEVICE, MAX_LENGTH
 from pooling import mean_pooling
-
-
-def print_params():
-    import params
-    for param in dir(params):
-        if param.isupper():
-            print(f'{param}:', getattr(params, param))
-
-
-def plot_elbow_method(embs):
-    sum_of_squared_distances = []
-    K = range(2, 50, 5)
-    for k in K:
-        km = sklearn.cluster.KMeans(n_clusters=k)
-        km = km.fit(embs)
-        sum_of_squared_distances.append(km.inertia_)
-    plt.plot(K, sum_of_squared_distances, 'bx-')
-    plt.xlabel('k')
-    plt.ylabel('sum_of_squared_distances')
-    plt.title('Elbow Method For Optimal k')
-    plt.show()
 
 
 def create_model_name(model, desc=""):
@@ -75,12 +50,3 @@ def build_encode_dense_fun(tokenizer, model):
         return embeddings
 
     return encode_dense
-
-
-def chunked(it, batch_size):
-    it = iter(it)
-    while True:
-        p = tuple(itertools.islice(it, batch_size))
-        if not p:
-            break
-        yield p

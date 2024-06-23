@@ -14,3 +14,4 @@ env/
 venv/
 tools/pylucene-9.10.0
 runs/
+datasets/
