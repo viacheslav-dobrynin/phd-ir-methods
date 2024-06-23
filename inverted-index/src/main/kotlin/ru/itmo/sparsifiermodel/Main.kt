@@ -12,7 +12,6 @@ import org.apache.lucene.index.IndexWriter
 import org.apache.lucene.index.IndexWriterConfig
 import org.apache.lucene.search.BooleanClause
 import org.apache.lucene.search.BooleanQuery
-import org.apache.lucene.search.BoostQuery
 import org.apache.lucene.search.IndexSearcher
 import org.apache.lucene.store.Directory
 import org.apache.lucene.store.FSDirectory
@@ -80,7 +79,7 @@ fun search() {
 fun buildQuery(query: FloatArray): BooleanQuery {
     val builder = BooleanQuery.Builder()
     for ((i, value) in query.withIndex()) if (value != 0f) {
-        builder.add(BoostQuery(FieldValueAsScoreQuery(i.toFieldName()), value), BooleanClause.Occur.SHOULD)
+        builder.add(FieldValueAsScoreQuery(i.toFieldName(), value), BooleanClause.Occur.SHOULD)
     }
     return builder.build()
 }

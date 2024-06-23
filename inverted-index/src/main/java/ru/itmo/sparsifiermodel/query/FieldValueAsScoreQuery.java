@@ -14,9 +14,14 @@ import java.util.Objects;
 public class FieldValueAsScoreQuery extends Query {
 
     private final String field;
+    private final float queryTermValue;
 
-    public FieldValueAsScoreQuery(String field) {
+    public FieldValueAsScoreQuery(String field, float queryTermValue) {
         this.field = Objects.requireNonNull(field);
+        if (Float.isInfinite(queryTermValue) || Float.isNaN(queryTermValue)) {
+            throw new IllegalArgumentException("Query term value must be finite and non-NaN");
+        }
+        this.queryTermValue = queryTermValue;
     }
 
     @Override
@@ -43,7 +48,7 @@ public class FieldValueAsScoreQuery extends Query {
                         final int docId = docID();
                         assert docId != DocIdSetIterator.NO_MORE_DOCS;
                         assert iterator.advanceExact(docId);
-                        return Float.intBitsToFloat((int) iterator.longValue()) * boost;
+                        return Float.intBitsToFloat((int) iterator.longValue()) * queryTermValue * boost;
                     }
 
                     @Override
@@ -67,7 +72,13 @@ public class FieldValueAsScoreQuery extends Query {
 
     @Override
     public String toString(String field) {
-        return "FieldValueAsScoreQuery [field=" + this.field + "]";
+        StringBuilder builder = new StringBuilder();
+        builder.append("FieldValueAsScoreQuery [field=");
+        builder.append(this.field);
+        builder.append(", queryTermValue=");
+        builder.append(this.queryTermValue);
+        builder.append("]");
+        return builder.toString();
     }
 
     @Override
@@ -79,7 +90,12 @@ public class FieldValueAsScoreQuery extends Query {
 
     @Override
     public boolean equals(Object other) {
-        return sameClassAs(other) && field.equals(((FieldValueAsScoreQuery) other).field);
+        return sameClassAs(other) && equalsTo(getClass().cast(other));
+    }
+
+    private boolean equalsTo(FieldValueAsScoreQuery other) {
+        return field.equals(other.field)
+                && Float.floatToIntBits(queryTermValue) == Float.floatToIntBits(other.queryTermValue);
     }
 
     @Override
@@ -87,6 +103,7 @@ public class FieldValueAsScoreQuery extends Query {
         final int prime = 31;
         int hash = classHash();
         hash = prime * hash + field.hashCode();
+        hash = prime * hash + Float.floatToIntBits(queryTermValue);
         return hash;
     }
 }
