@@ -1,6 +1,7 @@
 import itertools
 
 import lucene
+import torch
 from java.nio.file import Paths
 from org.apache.lucene.analysis.standard import StandardAnalyzer
 from org.apache.lucene.document import Document, FloatDocValuesField, StringField, Field
@@ -11,37 +12,39 @@ from tqdm.autonotebook import trange
 
 from dataset import load_dataset
 from util.path import delete_folder
-from util.field import to_field_name
+from util.field import to_field_name, to_doc_id_field
 from util.search import build_query
 
 
 class Runner:
-    def __init__(self):
+    def __init__(self, encode_fun):
         lucene.initVM()
+        self.encode = encode_fun
         self.analyzer = StandardAnalyzer()
         self.index_path = "./runs/inverted_index"
         self.index_jpath = Paths.get(self.index_path)
-        self.corpus, self.queries, self.qrels = load_dataset()
+        corpus, self.queries, self.qrels = load_dataset()
+        self.corpus = {doc_id: (doc["title"] + " " + doc["text"]).strip() for doc_id, doc in corpus.items()}
 
     def index(self):
-        delete_folder(self.index_path)
         config = IndexWriterConfig(self.analyzer)
         writer = IndexWriter(FSDirectory.open(self.index_jpath), config)
 
-        corpus = {doc_id: (doc["title"] + " " + doc["text"]).strip() for doc_id, doc in self.corpus.items()}
         batch_size = 100
-        encode = None
-        corpus_items = corpus.items()
-        for start_idx in trange(0, len(corpus), batch_size, desc="docs"):
+        corpus_items = self.corpus.items()
+        for start_idx in trange(0, len(self.corpus), batch_size, desc="docs"):
             batch = tuple(itertools.islice(corpus_items, start_idx, start_idx + batch_size))
             doc_ids, docs = list(zip(*batch))
-
-        for doc_id, emb in enumerate([[0.0, 3.5, 0.0], [4.5, 0.0, 5.5], [0.0, 6.5, 0.0]]):
-            doc = Document()
-            doc.add(StringField("doc_id", str(doc_id), Field.Store.YES))
-            for i, value in enumerate(emb):
-                if value != 0.0:
-                    doc.add(FloatDocValuesField(to_field_name(i), value))
+            emb_batch = self.encode(docs)
+            doc, prev_batch_idx = Document(), None
+            for batch_idx, term in torch.nonzero(emb_batch):
+                if prev_batch_idx is not None and prev_batch_idx != batch_idx:
+                    doc.add(to_doc_id_field(doc_ids[prev_batch_idx]))
+                    writer.addDocument(doc)
+                    doc = Document()
+                doc.add(FloatDocValuesField(to_field_name(term.item()), emb_batch[batch_idx, term].item()))
+                prev_batch_idx = batch_idx
+            doc.add(to_doc_id_field(doc_ids[prev_batch_idx]))
             writer.addDocument(doc)
         writer.close()
 
@@ -58,8 +61,12 @@ class Runner:
 
         reader.close()
 
+    def delete_index(self):
+        delete_folder(self.index_path)
+
 
 if __name__ == '__main__':
-    runner = Runner()
+    runner = Runner(encode_fun=lambda docs: torch.tensor([[12.0, .0, 15.0], [.0, 4.0, .0], [20.0, 30.5, .0]]))
+    runner.delete_index()
     runner.index()
     runner.search()
