@@ -1,3 +1,5 @@
+import itertools
+
 import sklearn
 import torch
 from matplotlib import pyplot as plt
@@ -73,3 +75,12 @@ def build_encode_dense_fun(tokenizer, model):
         return embeddings
 
     return encode_dense
+
+
+def chunked(it, batch_size):
+    it = iter(it)
+    while True:
+        p = tuple(itertools.islice(it, batch_size))
+        if not p:
+            break
+        yield p
