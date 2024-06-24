@@ -26,11 +26,10 @@ class Runner:
         corpus, self.queries, self.qrels = load_dataset()
         self.corpus = {doc_id: (doc["title"] + " " + doc["text"]).strip() for doc_id, doc in corpus.items()}
 
-    def index(self):
+    def index(self, batch_size = 100):
         config = IndexWriterConfig(self.analyzer)
         writer = IndexWriter(FSDirectory.open(self.index_jpath), config)
 
-        batch_size = 100
         corpus_items = self.corpus.items()
         for start_idx in trange(0, len(self.corpus), batch_size, desc="docs"):
             batch = tuple(itertools.islice(corpus_items, start_idx, start_idx + batch_size))
