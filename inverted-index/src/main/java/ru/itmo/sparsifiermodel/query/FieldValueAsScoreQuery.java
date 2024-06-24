@@ -58,7 +58,7 @@ public class FieldValueAsScoreQuery extends Query {
 
                     @Override
                     public DocIdSetIterator iterator() {
-                        return iterator;
+                        return iterator == null ? DocIdSetIterator.empty() : iterator;
                     }
 
                     @Override
