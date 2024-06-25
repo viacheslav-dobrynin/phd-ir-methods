@@ -6,7 +6,9 @@ import ai.djl.ndarray.types.Shape
 import org.apache.lucene.analysis.Analyzer
 import org.apache.lucene.analysis.standard.StandardAnalyzer
 import org.apache.lucene.document.Document
+import org.apache.lucene.document.Field
 import org.apache.lucene.document.FloatDocValuesField
+import org.apache.lucene.document.StringField
 import org.apache.lucene.index.DirectoryReader
 import org.apache.lucene.index.IndexWriter
 import org.apache.lucene.index.IndexWriterConfig
@@ -24,7 +26,7 @@ private val indexPath = Files.createTempDirectory("tempIndex")
 private val directory: Directory = FSDirectory.open(indexPath)
 
 fun main() {
-    val executionTime = measureTimeMillis {
+    val indexTime = measureTimeMillis {
         NDManager.newBaseManager().use { manager ->
             val docs = manager.create(
                 floatArrayOf(
@@ -35,10 +37,12 @@ fun main() {
                 Shape(3, 3)
             )
             buildIndex(docs)
-            search()
         }
     }
-    println("Time: $executionTime ms")
+    println("Index time: $indexTime ms")
+
+    val searchTime = measureTimeMillis { search(floatArrayOf(1f, 2f, 0f)) }
+    println("Search time: $searchTime ms")
 }
 
 fun buildIndex(embs: NDArray) {
@@ -48,6 +52,7 @@ fun buildIndex(embs: NDArray) {
     for (i in 0 until embs.size(0)) {
         val emb = embs[i].toFloatArray()
         val doc = Document()
+        doc.add(StringField("doc_id", "$i", Field.Store.YES))
         for ((j, value) in emb.withIndex()) if (value != 0f) {
             doc.add(FloatDocValuesField(j.toFieldName(), value))
         }
@@ -57,13 +62,12 @@ fun buildIndex(embs: NDArray) {
     writer.close()
 }
 
-fun search() {
+fun search(queryEmb: FloatArray) {
     val reader = DirectoryReader.open(FSDirectory.open(indexPath))
     val searcher = IndexSearcher(reader)
     searcher.similarity = TodoSimilarity()
 
-    val query = buildQuery(floatArrayOf(1f, 2f, 0f))
-    val hits = searcher.search(query, 10).scoreDocs
+    val hits = searcher.search(buildQuery(queryEmb), 10).scoreDocs
     println("Hits: ${hits.contentToString()}")
 
     // Iterate through the results:
