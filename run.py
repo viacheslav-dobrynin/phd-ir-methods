@@ -18,7 +18,10 @@ from util.search import build_query
 
 class Runner:
     def __init__(self, encode_fun):
-        lucene.initVM()
+        try:
+            lucene.initVM()
+        except ValueError as e:
+            print(f'Init error: {e}')
         self.encode = encode_fun
         self.analyzer = StandardAnalyzer()
         self.index_path = "./runs/inverted_index"
@@ -26,7 +29,7 @@ class Runner:
         corpus, self.queries, self.qrels = load_dataset()
         self.corpus = {doc_id: (doc["title"] + " " + doc["text"]).strip() for doc_id, doc in corpus.items()}
 
-    def index(self, batch_size = 100):
+    def index(self, batch_size=300):
         config = IndexWriterConfig(self.analyzer)
         writer = IndexWriter(FSDirectory.open(self.index_jpath), config)
 
@@ -47,14 +50,14 @@ class Runner:
             writer.addDocument(doc)
         writer.close()
 
-    def search(self):
+    def search(self, top_k=10):
         reader = DirectoryReader.open(FSDirectory.open(self.index_jpath))
         searcher = IndexSearcher(reader)
         results = {}
         query_ids = list(self.queries.keys())
         for query_id in query_ids:
             query_emb = self.encode([self.queries[query_id]])[0]
-            hits = searcher.search(build_query(query_emb), 10).scoreDocs
+            hits = searcher.search(build_query(query_emb), top_k).scoreDocs
             stored_fields = searcher.storedFields()
             query_result = {}
             for hit in hits:
