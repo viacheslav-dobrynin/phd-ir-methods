@@ -26,7 +26,7 @@ private val indexPath = Files.createTempDirectory("tempIndex")
 private val directory: Directory = FSDirectory.open(indexPath)
 
 fun main() {
-    val indexTime = measureTimeMillis {
+    var indexTime = measureTimeMillis {
         NDManager.newBaseManager().use { manager ->
             val docs = manager.create(
                 floatArrayOf(
@@ -41,8 +41,26 @@ fun main() {
     }
     println("Index time: $indexTime ms")
 
-    val searchTime = measureTimeMillis { search(floatArrayOf(1f, 2f, 0f)) }
+    var searchTime = measureTimeMillis { search(floatArrayOf(1f, 2f, 0f)) }
     println("Search time: $searchTime ms")
+
+
+    indexTime = measureTimeMillis {
+        NDManager.newBaseManager().use { manager ->
+            val docs = manager.randomNormal(Shape(600, 1))
+            buildIndex(docs)
+        }
+    }
+    println("Index time: $indexTime ms")
+
+    searchTime = measureTimeMillis {
+        NDManager.newBaseManager().use { manager ->
+            search(manager.randomNormal(Shape(1, 600)).toFloatArray())
+        }
+    }
+    println("Search time: $searchTime ms")
+
+    directory.close()
 }
 
 fun buildIndex(embs: NDArray) {
@@ -77,7 +95,6 @@ fun search(queryEmb: FloatArray) {
         println("Found doc: $hitDoc. Score: ${hits[i].score}")
     }
     reader.close()
-    directory.close()
 }
 
 fun buildQuery(query: FloatArray): BooleanQuery {
