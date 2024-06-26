@@ -33,38 +33,43 @@ class Runner:
         config = IndexWriterConfig(self.analyzer)
         writer = IndexWriter(FSDirectory.open(self.index_jpath), config)
 
-        corpus_items = self.corpus.items()
-        for start_idx in trange(0, len(self.corpus), batch_size, desc="docs"):
-            batch = tuple(itertools.islice(corpus_items, start_idx, start_idx + batch_size))
-            doc_ids, docs = list(zip(*batch))
-            emb_batch = self.encode(docs)
-            doc, prev_batch_idx = Document(), None
-            for batch_idx, term in torch.nonzero(emb_batch):
-                if prev_batch_idx is not None and prev_batch_idx != batch_idx:
-                    doc.add(to_doc_id_field(doc_ids[prev_batch_idx]))
-                    writer.addDocument(doc)
-                    doc = Document()
-                doc.add(FloatDocValuesField(to_field_name(term.item()), emb_batch[batch_idx, term].item()))
-                prev_batch_idx = batch_idx
-            doc.add(to_doc_id_field(doc_ids[prev_batch_idx]))
-            writer.addDocument(doc)
-        writer.close()
+        try:
+            corpus_items = self.corpus.items()
+            for start_idx in trange(0, len(self.corpus), batch_size, desc="docs"):
+                batch = tuple(itertools.islice(corpus_items, start_idx, start_idx + batch_size))
+                doc_ids, docs = list(zip(*batch))
+                emb_batch = self.encode(docs)
+                doc, prev_batch_idx = Document(), None
+                for batch_idx, term in torch.nonzero(emb_batch):
+                    if prev_batch_idx is not None and prev_batch_idx != batch_idx:
+                        doc.add(to_doc_id_field(doc_ids[prev_batch_idx]))
+                        writer.addDocument(doc)
+                        doc = Document()
+                    doc.add(FloatDocValuesField(to_field_name(term.item()), emb_batch[batch_idx, term].item()))
+                    prev_batch_idx = batch_idx
+                doc.add(to_doc_id_field(doc_ids[prev_batch_idx]))
+                writer.addDocument(doc)
+        finally:
+            writer.close()
 
     def search(self, top_k=10):
         reader = DirectoryReader.open(FSDirectory.open(self.index_jpath))
         searcher = IndexSearcher(reader)
         results = {}
-        query_ids = list(self.queries.keys())
-        for query_id in query_ids:
-            query_emb = self.encode([self.queries[query_id]])[0]
-            hits = searcher.search(build_query(query_emb), top_k).scoreDocs
-            stored_fields = searcher.storedFields()
-            query_result = {}
-            for hit in hits:
-                hit_doc = stored_fields.document(hit.doc)
-                query_result[hit_doc["doc_id"]] = hit.score
-            results[query_id] = query_result
-        reader.close()
+
+        try:
+            query_ids = list(self.queries.keys())
+            for query_id in query_ids:
+                query_emb = self.encode([self.queries[query_id]])[0]
+                hits = searcher.search(build_query(query_emb), top_k).scoreDocs
+                stored_fields = searcher.storedFields()
+                query_result = {}
+                for hit in hits:
+                    hit_doc = stored_fields.document(hit.doc)
+                    query_result[hit_doc["doc_id"]] = hit.score
+                results[query_id] = query_result
+        finally:
+            reader.close()
         return results
 
     def delete_index(self):
