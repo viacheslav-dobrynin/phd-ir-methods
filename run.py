@@ -17,7 +17,7 @@ from util.search import build_query
 
 
 class Runner:
-    def __init__(self, encode_fun):
+    def __init__(self, encode_fun, dataset=None, docs_number=None):
         try:
             lucene.initVM()
         except ValueError as e:
@@ -26,7 +26,8 @@ class Runner:
         self.analyzer = StandardAnalyzer()
         self.index_path = "./runs/inverted_index"
         self.index_jpath = Paths.get(self.index_path)
-        corpus, self.queries, self.qrels = load_dataset()
+        corpus, self.queries, self.qrels = load_dataset(dataset) if dataset else load_dataset()
+        corpus = dict(itertools.islice(corpus.items(), 0, docs_number)) if docs_number else corpus
         self.corpus = {doc_id: (doc["title"] + " " + doc["text"]).strip() for doc_id, doc in corpus.items()}
 
     def index(self, batch_size=300):
