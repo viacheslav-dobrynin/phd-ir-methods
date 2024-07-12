@@ -102,7 +102,7 @@ def get_trainer(logger):
         return L.Trainer(max_epochs=EPOCHS, logger=logger)
 
 
-def train():
+def train(slope=.1, model_desc=""):
     torch.manual_seed(SEED)
     np.random.seed(SEED)
 
@@ -117,11 +117,11 @@ def train():
                          distance_loss_alpha=DIST_LOSS_ALPHA,
                          regularization_loss=FLOPS(alpha=REG_LOSS_ALPHA),
 
-                         activation='lrelu', device=DEVICE,
+                         activation='lrelu', slope=slope,
+                         device=DEVICE,
                          anneal=ANNEAL)
 
-    desc = ""
-    model_name = create_model_name(model=model, desc=desc)
+    model_name = create_model_name(model=model, desc=model_desc)
     wandb.init(project=PROJECT, name=model_name)  # mode="disabled"
     wandb_logger = L.loggers.WandbLogger(project=PROJECT, log_model=True, name=model_name, id=model_name)
     trainer = get_trainer(logger=wandb_logger)
