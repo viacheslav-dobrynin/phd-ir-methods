@@ -110,21 +110,20 @@ def train():
     dataloader, dataset_n, max_iter = get_dataloader(tokenizer)
     kmeans = get_kmeans(dataloader)
 
-    for reg_loss_alpha in REG_LOSS_ALPHA:
-        model = SparserModel(latent_dim=LATENT_SIZE, embs_kmeans=kmeans, dataset_n=dataset_n, max_iter=max_iter,
-                             hidden_dim=HIDDEN_DIM,
+    model = SparserModel(latent_dim=LATENT_SIZE, embs_kmeans=kmeans, dataset_n=dataset_n, max_iter=max_iter,
+                         hidden_dim=HIDDEN_DIM,
 
-                             elbo_loss_alpha=ELBO_LOSS_ALPHA,
-                             distance_loss_alpha=DIST_LOSS_ALPHA,
-                             regularization_loss=FLOPS(alpha=reg_loss_alpha),
+                         elbo_loss_alpha=ELBO_LOSS_ALPHA,
+                         distance_loss_alpha=DIST_LOSS_ALPHA,
+                         regularization_loss=FLOPS(alpha=REG_LOSS_ALPHA),
 
-                             activation='lrelu', device=DEVICE,
-                             anneal=ANNEAL)
+                         activation='lrelu', device=DEVICE,
+                         anneal=ANNEAL)
 
-        desc = ""
-        model_name = create_model_name(model=model, desc=desc)
-        wandb.init(project=PROJECT, name=model_name)  # mode="disabled"
-        wandb_logger = L.loggers.WandbLogger(project=PROJECT, log_model=True, name=model_name, id=model_name)
-        trainer = get_trainer(logger=wandb_logger)
-        trainer.fit(model=model, train_dataloaders=dataloader)
-        wandb.finish()
+    desc = ""
+    model_name = create_model_name(model=model, desc=desc)
+    wandb.init(project=PROJECT, name=model_name)  # mode="disabled"
+    wandb_logger = L.loggers.WandbLogger(project=PROJECT, log_model=True, name=model_name, id=model_name)
+    trainer = get_trainer(logger=wandb_logger)
+    trainer.fit(model=model, train_dataloaders=dataloader)
+    wandb.finish()
