@@ -10,6 +10,7 @@ def create_model_name(model, desc=""):
             f"_{model.regularization_loss.__class__.__name__}_{str(model.regularization_loss.alpha).replace('.', '')}" +
             "_dist_" + str(model.distance_loss.alpha).replace(".", "") +
             "_n_clusts_" + str(model.embs_kmeans.n_clusters) +
+            "_slope_" + str(model.slope) +
             desc)
 
 
