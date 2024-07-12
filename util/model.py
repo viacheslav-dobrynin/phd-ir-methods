@@ -6,9 +6,9 @@ from pooling import mean_pooling
 
 def create_model_name(model, desc=""):
     return ("iVAE_s" + str(model.latent_dim) +
-            "_elbo_" + str(model.elbo_loss_alpha).replace(".", "") +
-            f"_{model.regularization_loss.__class__.__name__}_{str(model.regularization_loss.alpha).replace('.', '')}" +
-            "_dist_" + str(model.distance_loss.alpha).replace(".", "") +
+            "_elbo_" + str(model.elbo_loss_alpha) +
+            f"_{model.regularization_loss.__class__.__name__}_{str(model.regularization_loss.alpha)}" +
+            "_dist_" + str(model.distance_loss.alpha) +
             "_n_clusts_" + str(model.embs_kmeans.n_clusters) +
             "_slope_" + str(model.slope) +
             desc)
