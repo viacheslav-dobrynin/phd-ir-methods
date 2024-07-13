@@ -114,7 +114,6 @@ class SparserModel(L.LightningModule):
 
     def elbo(self, x, u):
         decoder_params, (g, v), z, prior_params = self.forward(x, u)
-        x_rec = decoder_params[0]
         log_px_z = self.decoder_dist.log_pdf(x, *decoder_params)
         log_qz_xu = self.encoder_dist.log_pdf(z, g, v)
         log_pz_u = self.prior_dist.log_pdf(z, *prior_params)
@@ -128,10 +127,10 @@ class SparserModel(L.LightningModule):
             log_qz_i = (torch.logsumexp(log_qz_tmp, dim=1, keepdim=False) - np.log(M * N)).sum(dim=-1)
 
             return (a * log_px_z - b * (log_qz_xu - log_qz) - c * (log_qz - log_qz_i) - d * (
-                    log_qz_i - log_pz_u)).mean(), x_rec, z # TODO: remove x_rec
+                    log_qz_i - log_pz_u)).mean(), z
 
         else:
-            return (log_px_z + log_pz_u - log_qz_xu).mean(), x_rec, z
+            return (log_px_z + log_pz_u - log_qz_xu).mean(), z
 
     def anneal(self, N, max_iter, it):
         thr = int(max_iter / 1.6)
@@ -151,7 +150,7 @@ class SparserModel(L.LightningModule):
         token_ids, token_mask = batch
         x, u = self.__encode_to_x_and_u(token_ids=token_ids, token_mask=token_mask)
 
-        elbo, x_rec, z = self.elbo(x, u)
+        elbo, z = self.elbo(x, u)
         elbo_loss = self.elbo_loss_alpha * elbo.mul(-1)
         reg_loss = self.regularization_loss(z)
         dist_loss = self.distance_loss(x, z)
