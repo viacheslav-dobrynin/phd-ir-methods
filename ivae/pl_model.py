@@ -23,7 +23,7 @@ class SparserModel(L.LightningModule):
 
                  n_layers=3, activation='lrelu', slope=.1, # TODO: try slope=0.01
 
-                 device='cpu', anneal=False):
+                 device='cpu', learning_rate=LEARNING_RATE, anneal=False):
 
         super().__init__()
         self.save_hyperparameters()
@@ -40,6 +40,7 @@ class SparserModel(L.LightningModule):
         self.n_layers = n_layers
         self.activation = activation
         self.slope = slope
+        self.learning_rate = learning_rate
         self.anneal_params = anneal
         self.embs_kmeans = embs_kmeans
         self.dataset_n = dataset_n
@@ -194,7 +195,7 @@ class SparserModel(L.LightningModule):
         self.training_step_outputs.clear()
 
     def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(self.parameters(), lr=LEARNING_RATE)
+        optimizer = torch.optim.AdamW(self.parameters(), lr=self.learning_rate)
         return optimizer
 
     def __encode_to_x_and_u(self, token_ids, token_mask):

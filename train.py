@@ -12,7 +12,7 @@ from ivae.pl_model import SparserModel
 from loss import FLOPS
 from params import (K_MEANS_LIB, NUM_CLUSTERS, KMEANS_FILE, EMBS_FILE, BACKBONE_MODEL_ID, DEVICE, SEED,
                     REG_LOSS_ALPHA, LATENT_SIZE, HIDDEN_DIM, ELBO_LOSS_ALPHA, DIST_LOSS_ALPHA, ANNEAL, PROJECT, EPOCHS,
-                    DEVICES)
+                    DEVICES, LEARNING_RATE)
 from pooling import mean_pooling
 from util.model import create_model_name
 
@@ -119,6 +119,7 @@ def train(slope=.1, model_desc=""):
 
                          activation='lrelu', slope=slope,
                          device=DEVICE,
+                         learning_rate=LEARNING_RATE,
                          anneal=ANNEAL)
 
     model_name = create_model_name(model=model, desc=model_desc)
