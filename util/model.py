@@ -51,3 +51,12 @@ def build_encode_dense_fun(tokenizer, model):
         return embeddings
 
     return encode_dense
+
+
+def sparsify_abs(x, sparse_ratio=0.2):
+    k = int(sparse_ratio * x.shape[1])
+    absx = torch.abs(x)
+    topval = absx.topk(k, dim=1)[0][:, -1]
+    topval = topval.expand(absx.shape[1], absx.shape[0]).permute(1, 0)
+    comp = (absx >= topval).to(x)
+    return comp * x
