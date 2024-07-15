@@ -95,14 +95,14 @@ def get_kmeans(dataloader):
     return kmeans
 
 
-def get_trainer(logger):
+def get_trainer(logger, detect_anomaly):
     if DEVICES:
-        return L.Trainer(max_epochs=EPOCHS, devices=DEVICES, logger=logger)
+        return L.Trainer(max_epochs=EPOCHS, devices=DEVICES, logger=logger, detect_anomaly=detect_anomaly)
     else:
-        return L.Trainer(max_epochs=EPOCHS, logger=logger)
+        return L.Trainer(max_epochs=EPOCHS, logger=logger, detect_anomaly=detect_anomaly)
 
 
-def train(slope=.1, model_desc=""):
+def train(slope=.1, detect_anomaly=False, model_desc=""):
     torch.manual_seed(SEED)
     np.random.seed(SEED)
 
@@ -125,6 +125,6 @@ def train(slope=.1, model_desc=""):
     model_name = create_model_name(model=model, desc=model_desc)
     wandb.init(project=PROJECT, name=model_name)  # mode="disabled"
     wandb_logger = L.loggers.WandbLogger(project=PROJECT, log_model=True, name=model_name, id=model_name)
-    trainer = get_trainer(logger=wandb_logger)
+    trainer = get_trainer(logger=wandb_logger, detect_anomaly=detect_anomaly)
     trainer.fit(model=model, train_dataloaders=dataloader)
     wandb.finish()
