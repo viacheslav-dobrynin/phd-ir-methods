@@ -14,9 +14,43 @@ from dataset import load_dataset
 from util.path import delete_folder
 from util.field import to_field_name, to_doc_id_field
 from util.search import build_query
+from in_memory_index import InMemoryInvertedIndex
 
 
-class Runner:
+class CustomIndexRunner:
+    def __init__(self, encode_fun, dataset=None, docs_number=None):
+        self.encode = encode_fun
+        self.index_path = "./runs/custom/inverted_index"
+        corpus, self.queries, self.qrels = load_dataset(dataset) if dataset else load_dataset()
+        corpus = dict(itertools.islice(corpus.items(), 0, docs_number)) if docs_number else corpus
+        self.corpus = {doc_id: (doc["title"] + " " + doc["text"]).strip() for doc_id, doc in corpus.items()}
+        self.inverted_index = InMemoryInvertedIndex()
+
+    def index(self, batch_size=300):
+        corpus_items = self.corpus.items()
+        for start_idx in trange(0, len(self.corpus), batch_size, desc="docs"):
+            batch = tuple(itertools.islice(corpus_items, start_idx, start_idx + batch_size))
+            doc_ids, docs = list(zip(*batch))
+            emb_batch = self.encode(docs)
+            for i in range(len(emb_batch)):
+                self.inverted_index.add(doc_ids[i], emb_batch[i])
+
+    def search(self, top_k=10):
+        results = {}
+
+        query_ids = list(self.queries.keys())
+        for query_id in query_ids:
+            query_emb = self.encode([self.queries[query_id]])[0]
+            hits = self.inverted_index.search(query_emb, top_k)
+
+            query_result = {}
+            for hit in hits:
+                query_result[hit[0]] = hit[1]
+            results[query_id] = query_result
+        return results
+        
+    
+class LuceneRunner:
     def __init__(self, encode_fun, dataset=None, docs_number=None):
         try:
             lucene.initVM()
@@ -75,11 +109,17 @@ class Runner:
 
     def delete_index(self):
         delete_folder(self.index_path)
+        
+        
+        
+
 
 
 if __name__ == '__main__':
-    runner = Runner(encode_fun=lambda docs: torch.tensor([[12.0, .0, 15.0], [.0, 4.0, .0], [20.0, 30.5, .0]]))
+    runner = LuceneRunner(encode_fun=lambda docs: torch.tensor([[12.0, .0, 15.0], [.0, 4.0, .0], [20.0, 30.5, .0]]))
     runner.delete_index()
     runner.index()
     search_results = runner.search()
     print(f"{search_results=}")
+
+
