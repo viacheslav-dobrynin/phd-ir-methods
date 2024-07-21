@@ -17,7 +17,7 @@ from util.search import build_query
 from in_memory_index import InMemoryInvertedIndex
 
 
-class CustomIndexRunner:
+class InMemoryIndexRunner:
     def __init__(self, encode_fun, dataset=None, docs_number=None):
         self.encode = encode_fun
         self.index_path = "./runs/custom/inverted_index"
