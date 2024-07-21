@@ -1,6 +1,6 @@
 from collections import defaultdict
 from typing import Dict
-
+import torch
 
 class InMemoryInvertedIndex:
     def __init__(self):
@@ -12,12 +12,14 @@ class InMemoryInvertedIndex:
         self.index[term].append((doc_id, doc_embedding[term].item()))
 
     def search(self, query_emb, top_k):
-      docs = []
+      score_by_doc_id_map = defaultdict(float)
+      
       for non_zero_index in torch.nonzero(query_emb):
         term = non_zero_index.item()
-        docs.extend(self.index[term])
+        for doc_id, value in self.index[term]:
+          score_by_doc_id_map[doc_id] += query_emb[non_zero_index].item() * value
       
-      return sorted(docs, key = lambda doc: doc[1], reverse = True)[:top_k]
+      return sorted(score_by_doc_id_map.items(), key=lambda e: e[1], reverse=True)[:top_k]
 
     def avg_len(self):
       return sum(len(v) for v in self.index.values() ) / len(self.index)
