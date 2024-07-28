@@ -48,8 +48,8 @@ class InMemoryIndexRunner:
                 query_result[hit[0]] = hit[1]
             results[query_id] = query_result
         return results
-        
-    
+
+
 class LuceneRunner:
     def __init__(self, encode_fun, dataset=None, docs_number=None):
         try:
@@ -109,10 +109,6 @@ class LuceneRunner:
 
     def delete_index(self):
         delete_folder(self.index_path)
-        
-        
-        
-
 
 
 if __name__ == '__main__':
@@ -121,5 +117,3 @@ if __name__ == '__main__':
     runner.index()
     search_results = runner.search()
     print(f"{search_results=}")
-
-
