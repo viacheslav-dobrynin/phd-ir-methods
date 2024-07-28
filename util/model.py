@@ -1,5 +1,4 @@
 import torch
-import torch.nn.functional as F
 
 from params import DEVICE, MAX_LENGTH
 from pooling import mean_pooling
@@ -59,4 +58,5 @@ def sparsify_abs(x, sparse_ratio=0.2):
     absx = torch.abs(x)
     topval = absx.topk(k, dim=1)[0][:, -1]
     topval = topval.expand(absx.shape[1], absx.shape[0]).permute(1, 0)
-    return (torch.sign(x) * F.relu(absx - topval)).to(x)
+    comp = (absx >= topval).to(x)
+    return comp * x
