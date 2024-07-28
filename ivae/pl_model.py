@@ -1,6 +1,5 @@
 import numpy as np
 import pytorch_lightning as L
-from pytorch_lightning.utilities import grad_norm
 import torch
 import wandb
 from transformers import AutoModel
@@ -9,9 +8,8 @@ from ivae.model import Normal, MLP, weights_init
 from loss import DistanceLoss, FLOPS
 from params import (BACKBONE_MODEL_ID, LEARNING_RATE, ELBO_LOSS_ALPHA,
                     DIST_LOSS_ALPHA, REG_LOSS_ALPHA,
-                    LOG_EVERY, EPOCHS)
+                    LOG_EVERY)
 from pooling import mean_pooling
-from util.model import sparsify_abs
 
 
 class SparserModel(L.LightningModule):
@@ -47,8 +45,6 @@ class SparserModel(L.LightningModule):
         self.embs_kmeans = embs_kmeans
         self.dataset_n = dataset_n
         self.max_iter = max_iter
-        self.target_sparse_ratio = 0.2
-        self.train_sparse_ratio = 1
 
         if prior is None:
             self.prior_dist = Normal(device=device)
@@ -94,7 +90,6 @@ class SparserModel(L.LightningModule):
         x, u = self.__encode_to_x_and_u(token_ids=token_ids, token_mask=token_mask)
         encoder_params = self.encoder_params(x, u)
         z = self.encoder_dist.sample(*encoder_params)
-        z = sparsify_abs(z, sparse_ratio=self.target_sparse_ratio)
         return z
 
     def encoder_params(self, x, u):
@@ -115,7 +110,6 @@ class SparserModel(L.LightningModule):
         prior_params = self.prior_params(u)
         encoder_params = self.encoder_params(x, u)
         z = self.encoder_dist.sample(*encoder_params)
-        z = sparsify_abs(z, sparse_ratio=self.train_sparse_ratio)
         decoder_params = self.decoder_params(z)
         return decoder_params, encoder_params, z, prior_params
 
@@ -196,24 +190,13 @@ class SparserModel(L.LightningModule):
             f"regularization loss = {reg_loss:.2f}, " +
             f"distance loss = {dist_loss:.2f}, " +
             f"nonzero count = {z_nonzero:.0f}, " +
-            f"training hyperparams = {self._training_hyperparams}, " +
-            f"train_sparse_ratio = {self.train_sparse_ratio:.2f}"
+            f"training hyperparams = {self._training_hyperparams}"
         )
         self.training_step_outputs.clear()
-        diff = 1 - self.target_sparse_ratio
-        self.train_sparse_ratio -= diff / (EPOCHS - 1)
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=self.learning_rate)
         return optimizer
-
-    def on_before_optimizer_step(self, optimizer):
-        # Compute the 2-norm for each layer
-        # If using mixed precision, the gradients are already unscaled here
-        self.log_dict(grad_norm(self.logl, norm_type=2))
-        self.log_dict(grad_norm(self.f, norm_type=2))
-        self.log_dict(grad_norm(self.g, norm_type=2))
-        self.log_dict(grad_norm(self.logv, norm_type=2))
 
     def __encode_to_x_and_u(self, token_ids, token_mask):
         x = self.backbone(input_ids=token_ids, attention_mask=token_mask)
