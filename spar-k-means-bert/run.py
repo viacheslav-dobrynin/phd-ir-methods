@@ -146,4 +146,5 @@ if __name__ == '__main__':
         results[query_id] = query_result
 
     retriever = EvaluateRetrieval(score_function="dot")
-    retriever.evaluate(qrels, results, retriever.k_values)
+    retrieval_result = retriever.evaluate(qrels, results, retriever.k_values)
+    print(retrieval_result)
