@@ -37,8 +37,7 @@ def load_model():
 
 
 # Mean Pooling - Take attention mask into account for correct averaging
-def mean_pooling(model_output, attention_mask):
-    token_embeddings = model_output
+def mean_pooling(token_embeddings, attention_mask):
     input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
     return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
 
@@ -110,6 +109,8 @@ if __name__ == '__main__':
     for doc_ids, token_ids_batch, attention_mask in tqdm.tqdm(iterable=dataloader, desc="encode_to_token_embs"):
         embs = encode_to_token_embs(input_ids=token_ids_batch, attention_mask=attention_mask)
         embs = embs.cpu()
+        token_ids_batch = token_ids_batch.cpu()
+        attention_mask = attention_mask.cpu()
         for idx, doc_id in enumerate(doc_ids):
             doc_id_to_embs[doc_id] = (token_ids_batch[idx], attention_mask[idx], embs[idx])
 
