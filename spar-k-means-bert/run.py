@@ -6,10 +6,26 @@ import sklearn.cluster
 import torch
 import tqdm
 from beir.retrieval.evaluation import EvaluateRetrieval
+from torch.utils.data import Dataset, DataLoader
 from transformers import AutoTokenizer, AutoModel
 
 from dataset import load_dataset
 from params import BACKBONE_MODEL_ID, DEVICE
+
+
+class CorpusDataset(Dataset):
+
+    def __init__(self, corpus):
+        self.doc_ids = list(corpus.keys())
+        docs = list(corpus.values())
+        self.docs_len = len(docs)
+        self.tokenized_docs = tokenize(docs).to(DEVICE)
+
+    def __len__(self):
+        return self.docs_len
+
+    def __getitem__(self, item):
+        return self.doc_ids[item], self.tokenized_docs['input_ids'][item], self.tokenized_docs['attention_mask'][item]
 
 
 def load_model():
@@ -28,24 +44,20 @@ def mean_pooling(model_output, attention_mask):
 
 
 # Encode text
-def encode_to_token_embs(texts):
-    # Tokenize sentences
-    encoded_input = tokenize(texts).to(DEVICE)
-
+def encode_to_token_embs(input_ids, attention_mask):
     # Compute token embeddings
     with torch.no_grad():
-        model_output = model(**encoded_input, return_dict=True)
+        model_output = model(input_ids=input_ids, attention_mask=attention_mask, return_dict=True)
 
-    return encoded_input.to("cpu"), model_output.last_hidden_state.cpu()
+    return model_output.last_hidden_state
 
 
 def tokenize(texts):
-    return tokenizer(texts, padding=True, truncation=True, return_tensors='pt')
+    return tokenizer(texts, padding=True, truncation=True, return_tensors='pt').to(DEVICE)
 
 
 def get_contextualized_embs(token, doc_id):
-    tokenized, embs = doc_id_to_embs[doc_id]
-    input_ids = tokenized['input_ids']
+    input_ids, _, embs = doc_id_to_embs[doc_id]
     idxs = torch.nonzero(input_ids == token, as_tuple=True)
     return embs[idxs]
 
@@ -58,7 +70,7 @@ class InvertedIndex:
         self.index[token_and_cluster_id].add(doc_id_and_score)
 
     def search(self, query, top_k, n_neighbors=3):
-        tokenized, contextualized_embs = encode_to_token_embs(query)
+        contextualized_embs = encode_to_token_embs(**tokenize(query))
         doc_id_and_score_list = []
         for contextualized_emb in contextualized_embs.squeeze(0):
             _, I = index.search(np.array([contextualized_emb.cpu().detach().numpy()]), n_neighbors)
@@ -79,19 +91,27 @@ if __name__ == '__main__':
     corpus = {doc_id: (doc["title"] + sep + doc["text"]).strip() for doc_id, doc in corpus.items()}
     print(f"Corpus size={len(corpus)}, queries size={len(queries)}, qrels size={len(qrels)}")
     tokenizer = AutoTokenizer.from_pretrained(BACKBONE_MODEL_ID, use_fast=True)
+    dataset = CorpusDataset(corpus)
+    batch_size = 128
+    dataloader = DataLoader(dataset=dataset, batch_size=batch_size)
     model = load_model()
 
     token_to_doc_ids = defaultdict(set)
     skip_tokens = {0, 101, 102}
-    for doc_id, doc in corpus.items():
-        for token in tokenize(doc)['input_ids'][0]:
-            token = token.item()
-            if token not in skip_tokens:
-                token_to_doc_ids[token].add(doc_id)
+
+    for doc_ids, token_ids_batch, _ in tqdm.tqdm(iterable=dataloader, desc="build_token_to_doc_ids"):
+        for idx, doc_id in enumerate(doc_ids):
+            for token_id in token_ids_batch[idx]:
+                token_id = token_id.item()
+                if token_id not in skip_tokens:
+                    token_to_doc_ids[token_id].add(doc_id)
 
     doc_id_to_embs = {}
-    for doc_id, doc in tqdm.tqdm(iterable=corpus.items(), desc="encode_to_token_embs"):
-        doc_id_to_embs[doc_id] = encode_to_token_embs(doc)
+    for doc_ids, token_ids_batch, attention_mask in tqdm.tqdm(iterable=dataloader, desc="encode_to_token_embs"):
+        embs = encode_to_token_embs(input_ids=token_ids_batch, attention_mask=attention_mask)
+        embs = embs.cpu()
+        for idx, doc_id in enumerate(doc_ids):
+            doc_id_to_embs[doc_id] = (token_ids_batch[idx], attention_mask[idx], embs[idx])
 
     n_clusters = 8
     M = 32  # is the number of neighbors used in the graph. A larger M is more accurate but uses more memory
@@ -118,11 +138,10 @@ if __name__ == '__main__':
 
     for token, doc_ids in tqdm.tqdm(iterable=token_to_doc_ids.items(), desc="build_inverted_index"):
         for doc_id in doc_ids:
-            tokenized, embs = doc_id_to_embs[doc_id]
-            input_ids = tokenized['input_ids']
+            input_ids, attention_mask, embs = doc_id_to_embs[doc_id]
             idxs = torch.nonzero(input_ids == token, as_tuple=True)
             contextualized_embs = embs[idxs]
-            doc_emb = mean_pooling(embs, tokenized['attention_mask']).cpu().detach().numpy()
+            doc_emb = mean_pooling(embs, attention_mask).cpu().detach().numpy()
             for contextualized_emb in contextualized_embs:
                 D, I = index.search(np.array([contextualized_emb.cpu().detach().numpy()]), index_n_neighbors)
                 centroids = [index.reconstruct(id) for id in I[0].tolist()]
