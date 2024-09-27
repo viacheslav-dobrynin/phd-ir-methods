@@ -1,3 +1,4 @@
+import pickle
 from collections import defaultdict
 
 import faiss
@@ -6,9 +7,10 @@ import sklearn.cluster
 import torch
 import tqdm
 from beir.retrieval.evaluation import EvaluateRetrieval
+from faiss import read_index, write_index
 from torch.utils.data import Dataset, DataLoader
 from transformers import AutoTokenizer, AutoModel
-
+import os
 from dataset import load_dataset
 from params import BACKBONE_MODEL_ID, DEVICE
 
@@ -72,7 +74,7 @@ class InvertedIndex:
         contextualized_embs = encode_to_token_embs(**tokenize(query))
         doc_id_and_score_list = []
         for contextualized_emb in contextualized_embs.squeeze(0):
-            _, I = index.search(np.array([contextualized_emb.cpu().detach().numpy()]), n_neighbors)
+            _, I = hnsw_index.search(np.array([contextualized_emb.cpu().detach().numpy()]), n_neighbors)
             token_and_cluster_id_list = [faiss_idx_to_token[id] for id in I[0].tolist()]
             for token_and_cluster_id in token_and_cluster_id_list:
                 for doc_id_and_score in self.index[token_and_cluster_id]:
@@ -82,6 +84,45 @@ class InvertedIndex:
         for doc_id, score in doc_id_and_score_list:
             doc_id_to_score[doc_id] += score
         return sorted(doc_id_to_score.items(), key=lambda e: e[1], reverse=True)[:top_k]
+
+
+def build_hnsw_index():
+    base_path = "./"
+    hnsw_file_name = f"{base_path}hnsw.index"
+    faiss_idx_to_token_file_name = f"{base_path}faiss_idx_to_token.pickle"
+
+    if os.path.isfile(hnsw_file_name) and os.path.isfile(faiss_idx_to_token_file_name):
+        with open(faiss_idx_to_token_file_name, "rb") as f:
+            return read_index(hnsw_file_name), pickle.load(f)
+
+    if os.path.isfile(hnsw_file_name):
+        os.remove(hnsw_file_name)
+    if os.path.isfile(faiss_idx_to_token_file_name):
+        os.remove(faiss_idx_to_token_file_name)
+
+    hnsw_index = faiss.IndexHNSWFlat(model.config.hidden_size, M)
+    faiss_idx_to_token = {}
+
+    for token, doc_ids in tqdm.tqdm(iterable=token_to_doc_ids.items(), desc="build_hnsw"):
+        emb_batches = []
+        for doc_id in doc_ids:
+            emb_batch = get_contextualized_embs(token, doc_id)
+            emb_batches.append(emb_batch.cpu().detach().numpy())
+        embs = np.concatenate(emb_batches)
+        kmeans = sklearn.cluster.KMeans(
+            n_clusters=n_clusters if len(embs) > n_clusters else len(embs),
+            init='k-means++',
+            n_init='auto')
+        kmeans.fit(embs)
+        for i, centroid in enumerate(kmeans.cluster_centers_):
+            hnsw_index.add(np.array([centroid]))
+            faiss_idx_to_token[hnsw_index.ntotal - 1] = (token, i)
+
+    write_index(hnsw_index, hnsw_file_name)
+    with open(faiss_idx_to_token_file_name, "wb") as f:
+        pickle.dump(faiss_idx_to_token, f)
+
+    return hnsw_index, faiss_idx_to_token
 
 
 if __name__ == '__main__':
@@ -112,27 +153,11 @@ if __name__ == '__main__':
         token_ids_batch = token_ids_batch.cpu()
         attention_mask = attention_mask.cpu()
         for idx, doc_id in enumerate(doc_ids):
-            doc_id_to_embs[doc_id] = (token_ids_batch[idx], attention_mask[idx], embs[idx])
+            doc_id_to_embs[doc_id] = (token_ids_batch[idx].unsqueeze(0), attention_mask[idx].unsqueeze(0), embs[idx].unsqueeze(0))
 
     n_clusters = 8
     M = 32  # is the number of neighbors used in the graph. A larger M is more accurate but uses more memory
-    faiss_idx_to_token = {}
-    index = faiss.IndexHNSWFlat(model.config.hidden_size, M)
-
-    for token, doc_ids in tqdm.tqdm(iterable=token_to_doc_ids.items(), desc="build_hnsw"):
-        emb_batches = []
-        for doc_id in doc_ids:
-            emb_batch = get_contextualized_embs(token, doc_id)
-            emb_batches.append(emb_batch.cpu().detach().numpy())
-        embs = np.concatenate(emb_batches)
-        kmeans = sklearn.cluster.KMeans(
-            n_clusters=n_clusters if len(embs) > n_clusters else len(embs),
-            init='k-means++',
-            n_init='auto')
-        kmeans.fit(embs)
-        for i, centroid in enumerate(kmeans.cluster_centers_):
-            index.add(np.array([centroid]))
-            faiss_idx_to_token[index.ntotal - 1] = (token, i)
+    hnsw_index, faiss_idx_to_token = build_hnsw_index()
 
     index_n_neighbors = 8
     inverted_index = InvertedIndex()
@@ -144,8 +169,8 @@ if __name__ == '__main__':
             contextualized_embs = embs[idxs]
             doc_emb = mean_pooling(embs, attention_mask).cpu().detach().numpy()
             for contextualized_emb in contextualized_embs:
-                D, I = index.search(np.array([contextualized_emb.cpu().detach().numpy()]), index_n_neighbors)
-                centroids = [index.reconstruct(id) for id in I[0].tolist()]
+                D, I = hnsw_index.search(np.array([contextualized_emb.cpu().detach().numpy()]), index_n_neighbors)
+                centroids = [hnsw_index.reconstruct(id) for id in I[0].tolist()]
                 token_and_cluster_id_list = [faiss_idx_to_token[id] for id in I[0].tolist()]
                 centroids = np.stack(centroids)
                 scores = np.squeeze(doc_emb @ np.stack(centroids).T, 0)
