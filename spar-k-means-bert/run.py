@@ -170,10 +170,9 @@ if __name__ == '__main__':
             doc_emb = mean_pooling(embs, attention_mask).cpu().detach().numpy()
             for contextualized_emb in contextualized_embs:
                 D, I = hnsw_index.search(np.array([contextualized_emb.cpu().detach().numpy()]), index_n_neighbors)
-                centroids = [hnsw_index.reconstruct(id) for id in I[0].tolist()]
+                centroids = np.stack([hnsw_index.reconstruct(id) for id in I[0].tolist()])
                 token_and_cluster_id_list = [faiss_idx_to_token[id] for id in I[0].tolist()]
-                centroids = np.stack(centroids)
-                scores = np.squeeze(doc_emb @ np.stack(centroids).T, 0)
+                scores = np.squeeze(doc_emb @ centroids.T, 0)
                 for token_and_cluster_id, score in zip(token_and_cluster_id_list, scores):
                     inverted_index.add(token_and_cluster_id, (doc_id, score))
 
