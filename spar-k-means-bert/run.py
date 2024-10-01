@@ -86,6 +86,31 @@ class InvertedIndex:
         return sorted(doc_id_to_score.items(), key=lambda e: e[1], reverse=True)[:top_k]
 
 
+def build_token_to_doc_ids():
+    token_to_doc_ids = defaultdict(set)
+    skip_tokens = {0, 101, 102}
+    for doc_ids, token_ids_batch, _ in tqdm.tqdm(iterable=dataloader, desc="build_token_to_doc_ids"):
+        for idx, doc_id in enumerate(doc_ids):
+            for token_id in token_ids_batch[idx]:
+                token_id = token_id.item()
+                if token_id not in skip_tokens:
+                    token_to_doc_ids[token_id].add(doc_id)
+    return token_to_doc_ids
+
+
+def build_doc_id_to_embs():
+    doc_id_to_embs = {}
+    for doc_ids, token_ids_batch, attention_mask in tqdm.tqdm(iterable=dataloader, desc="encode_to_token_embs"):
+        embs = encode_to_token_embs(input_ids=token_ids_batch, attention_mask=attention_mask)
+        embs = embs.cpu()
+        token_ids_batch = token_ids_batch.cpu()
+        attention_mask = attention_mask.cpu()
+        for idx, doc_id in enumerate(doc_ids):
+            doc_id_to_embs[doc_id] = (
+            token_ids_batch[idx].unsqueeze(0), attention_mask[idx].unsqueeze(0), embs[idx].unsqueeze(0))
+    return doc_id_to_embs
+
+
 def build_hnsw_index():
     base_path = "./"
     hnsw_file_name = f"{base_path}hnsw.index"
@@ -125,43 +150,8 @@ def build_hnsw_index():
     return hnsw_index, faiss_idx_to_token
 
 
-if __name__ == '__main__':
-    corpus, queries, qrels = load_dataset()
-    sep = " "
-    corpus = {doc_id: (doc["title"] + sep + doc["text"]).strip() for doc_id, doc in corpus.items()}
-    print(f"Corpus size={len(corpus)}, queries size={len(queries)}, qrels size={len(qrels)}")
-    tokenizer = AutoTokenizer.from_pretrained(BACKBONE_MODEL_ID, use_fast=True)
-    dataset = CorpusDataset(corpus)
-    batch_size = 128
-    dataloader = DataLoader(dataset=dataset, batch_size=batch_size)
-    model = load_model()
-
-    token_to_doc_ids = defaultdict(set)
-    skip_tokens = {0, 101, 102}
-
-    for doc_ids, token_ids_batch, _ in tqdm.tqdm(iterable=dataloader, desc="build_token_to_doc_ids"):
-        for idx, doc_id in enumerate(doc_ids):
-            for token_id in token_ids_batch[idx]:
-                token_id = token_id.item()
-                if token_id not in skip_tokens:
-                    token_to_doc_ids[token_id].add(doc_id)
-
-    doc_id_to_embs = {}
-    for doc_ids, token_ids_batch, attention_mask in tqdm.tqdm(iterable=dataloader, desc="encode_to_token_embs"):
-        embs = encode_to_token_embs(input_ids=token_ids_batch, attention_mask=attention_mask)
-        embs = embs.cpu()
-        token_ids_batch = token_ids_batch.cpu()
-        attention_mask = attention_mask.cpu()
-        for idx, doc_id in enumerate(doc_ids):
-            doc_id_to_embs[doc_id] = (token_ids_batch[idx].unsqueeze(0), attention_mask[idx].unsqueeze(0), embs[idx].unsqueeze(0))
-
-    n_clusters = 8
-    M = 32  # is the number of neighbors used in the graph. A larger M is more accurate but uses more memory
-    hnsw_index, faiss_idx_to_token = build_hnsw_index()
-
-    index_n_neighbors = 8
+def build_inverted_index():
     inverted_index = InvertedIndex()
-
     for token, doc_ids in tqdm.tqdm(iterable=token_to_doc_ids.items(), desc="build_inverted_index"):
         contextualized_embs_list = []
         doc_ids_list = []
@@ -190,10 +180,11 @@ if __name__ == '__main__':
             assert len(token_and_cluster_id_list) == len(scores)
             for token_and_cluster_id, score in zip(token_and_cluster_id_list, scores):
                 inverted_index.add(token_and_cluster_id, (doc_id, score))
+    return inverted_index
 
+
+def perform_searches():
     results = {}
-    top_k = 1000
-    search_n_neighbors = 3
     query_ids = list(queries.keys())
     for query_id in tqdm.tqdm(iterable=query_ids, desc="search"):
         doc_id_and_score_list = inverted_index.search(query=queries[query_id],
@@ -203,6 +194,33 @@ if __name__ == '__main__':
         for doc_id, score in doc_id_and_score_list:
             query_result[doc_id] = score
         results[query_id] = query_result
+    return results
+
+
+if __name__ == '__main__':
+    corpus, queries, qrels = load_dataset()
+    sep = " "
+    corpus = {doc_id: (doc["title"] + sep + doc["text"]).strip() for doc_id, doc in corpus.items()}
+    print(f"Corpus size={len(corpus)}, queries size={len(queries)}, qrels size={len(qrels)}")
+    tokenizer = AutoTokenizer.from_pretrained(BACKBONE_MODEL_ID, use_fast=True)
+    dataset = CorpusDataset(corpus)
+    batch_size = 128
+    dataloader = DataLoader(dataset=dataset, batch_size=batch_size)
+    model = load_model()
+
+    token_to_doc_ids = build_token_to_doc_ids()
+    doc_id_to_embs = build_doc_id_to_embs()
+
+    n_clusters = 8
+    M = 32  # is the number of neighbors used in the graph. A larger M is more accurate but uses more memory
+    hnsw_index, faiss_idx_to_token = build_hnsw_index()
+
+    index_n_neighbors = 8
+    inverted_index = build_inverted_index()
+
+    top_k = 1000
+    search_n_neighbors = 3
+    results = perform_searches()
 
     retriever = EvaluateRetrieval(score_function="dot")
     retrieval_result = retriever.evaluate(qrels, results, retriever.k_values)
