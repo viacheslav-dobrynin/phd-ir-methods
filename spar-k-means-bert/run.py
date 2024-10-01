@@ -1,3 +1,4 @@
+import argparse
 import pickle
 from collections import defaultdict
 
@@ -125,7 +126,7 @@ def build_hnsw_index():
     if os.path.isfile(faiss_idx_to_token_file_name):
         os.remove(faiss_idx_to_token_file_name)
 
-    hnsw_index = faiss.IndexHNSWFlat(model.config.hidden_size, hnsw_M)
+    hnsw_index = faiss.IndexHNSWFlat(model.config.hidden_size, args.hnsw_M)
     faiss_idx_to_token = {}
 
     for token, doc_ids in tqdm.tqdm(iterable=token_to_doc_ids.items(), desc="build_hnsw"):
@@ -135,7 +136,7 @@ def build_hnsw_index():
             emb_batches.append(emb_batch.cpu().detach().numpy())
         embs = np.concatenate(emb_batches)
         kmeans = sklearn.cluster.KMeans(
-            n_clusters=kmeans_n_clusters if len(embs) > kmeans_n_clusters else len(embs),
+            n_clusters=args.kmeans_n_clusters if len(embs) > args.kmeans_n_clusters else len(embs),
             init='k-means++',
             n_init='auto')
         kmeans.fit(embs)
@@ -169,7 +170,7 @@ def build_inverted_index():
 
         contextualized_embs = torch.cat(contextualized_embs_list, dim=0).cpu().detach().numpy()
 
-        _, I = hnsw_index.search(contextualized_embs, index_n_neighbors)
+        _, I = hnsw_index.search(contextualized_embs, args.index_n_neighbors)
         assert len(I) == len(contextualized_embs)
         for idx in range(len(contextualized_embs)):
             doc_id = doc_ids_list[idx]
@@ -188,8 +189,8 @@ def perform_searches():
     query_ids = list(queries.keys())
     for query_id in tqdm.tqdm(iterable=query_ids, desc="search"):
         doc_id_and_score_list = inverted_index.search(query=queries[query_id],
-                                                      top_k=search_top_k,
-                                                      n_neighbors=search_n_neighbors)
+                                                      top_k=args.search_top_k,
+                                                      n_neighbors=args.search_n_neighbors)
         query_result = {}
         for doc_id, score in doc_id_and_score_list:
             query_result[doc_id] = score
@@ -199,20 +200,24 @@ def perform_searches():
 
 if __name__ == '__main__':
     # Hyperparameters
-    batch_size = 128
-    kmeans_n_clusters = 8
-    hnsw_M = 32  # is the number of neighbors used in the graph. A larger M is more accurate but uses more memory
-    index_n_neighbors = 8
-    search_top_k = 1000
-    search_n_neighbors = 3
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-d', '--dataset', type=str, default='scifact', help='BEIR dataset name (default scifact)')
+    parser.add_argument('-b', '--batch-size', type=int, default=128, help='batch size (default 128)')
+    parser.add_argument('-kmn', '--kmeans-n-clusters', type=int, default=8, help='kmeans clusters number (default 8)')
+    parser.add_argument('-M', '--hnsw-M', type=int, default=32, help='the number of neighbors used in the graph. A larger M is more accurate but uses more memory (default 32)')
+    parser.add_argument('-in', '--index-n-neighbors', type=int, default=8, help='index neighbors number (default 8)')
+    parser.add_argument('-stk', '--search-top-k', type=int, default=1000, help='search tok k results (default 1000)')
+    parser.add_argument('-sn', '--search-n-neighbors', type=int, default=3, help='search neighbors number (default 3)')
+    args = parser.parse_args()
+    print(f"Params: {args}")
     # Data, tokenizer, model
     tokenizer = AutoTokenizer.from_pretrained(BACKBONE_MODEL_ID, use_fast=True)
-    corpus, queries, qrels = load_dataset()
+    corpus, queries, qrels = load_dataset(dataset=args.dataset)
     sep = " "
     corpus = {doc_id: (doc["title"] + sep + doc["text"]).strip() for doc_id, doc in corpus.items()}
     print(f"Corpus size={len(corpus)}, queries size={len(queries)}, qrels size={len(qrels)}")
     dataset = CorpusDataset(corpus)
-    dataloader = DataLoader(dataset=dataset, batch_size=batch_size)
+    dataloader = DataLoader(dataset=dataset, batch_size=args.batch_size)
     model = load_model()
     # Indexing
     token_to_doc_ids = build_token_to_doc_ids()
