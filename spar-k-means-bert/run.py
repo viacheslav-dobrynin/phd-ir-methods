@@ -125,7 +125,7 @@ def build_hnsw_index():
     if os.path.isfile(faiss_idx_to_token_file_name):
         os.remove(faiss_idx_to_token_file_name)
 
-    hnsw_index = faiss.IndexHNSWFlat(model.config.hidden_size, M)
+    hnsw_index = faiss.IndexHNSWFlat(model.config.hidden_size, hnsw_M)
     faiss_idx_to_token = {}
 
     for token, doc_ids in tqdm.tqdm(iterable=token_to_doc_ids.items(), desc="build_hnsw"):
@@ -135,7 +135,7 @@ def build_hnsw_index():
             emb_batches.append(emb_batch.cpu().detach().numpy())
         embs = np.concatenate(emb_batches)
         kmeans = sklearn.cluster.KMeans(
-            n_clusters=n_clusters if len(embs) > n_clusters else len(embs),
+            n_clusters=kmeans_n_clusters if len(embs) > kmeans_n_clusters else len(embs),
             init='k-means++',
             n_init='auto')
         kmeans.fit(embs)
@@ -188,7 +188,7 @@ def perform_searches():
     query_ids = list(queries.keys())
     for query_id in tqdm.tqdm(iterable=query_ids, desc="search"):
         doc_id_and_score_list = inverted_index.search(query=queries[query_id],
-                                                      top_k=top_k,
+                                                      top_k=search_top_k,
                                                       n_neighbors=search_n_neighbors)
         query_result = {}
         for doc_id, score in doc_id_and_score_list:
@@ -198,30 +198,29 @@ def perform_searches():
 
 
 if __name__ == '__main__':
+    # Hyperparameters
+    batch_size = 128
+    kmeans_n_clusters = 8
+    hnsw_M = 32  # is the number of neighbors used in the graph. A larger M is more accurate but uses more memory
+    index_n_neighbors = 8
+    search_top_k = 1000
+    search_n_neighbors = 3
+    # Data, tokenizer, model
+    tokenizer = AutoTokenizer.from_pretrained(BACKBONE_MODEL_ID, use_fast=True)
     corpus, queries, qrels = load_dataset()
     sep = " "
     corpus = {doc_id: (doc["title"] + sep + doc["text"]).strip() for doc_id, doc in corpus.items()}
     print(f"Corpus size={len(corpus)}, queries size={len(queries)}, qrels size={len(qrels)}")
-    tokenizer = AutoTokenizer.from_pretrained(BACKBONE_MODEL_ID, use_fast=True)
     dataset = CorpusDataset(corpus)
-    batch_size = 128
     dataloader = DataLoader(dataset=dataset, batch_size=batch_size)
     model = load_model()
-
+    # Indexing
     token_to_doc_ids = build_token_to_doc_ids()
     doc_id_to_embs = build_doc_id_to_embs()
-
-    n_clusters = 8
-    M = 32  # is the number of neighbors used in the graph. A larger M is more accurate but uses more memory
     hnsw_index, faiss_idx_to_token = build_hnsw_index()
-
-    index_n_neighbors = 8
     inverted_index = build_inverted_index()
-
-    top_k = 1000
-    search_n_neighbors = 3
+    # Retrieval
     results = perform_searches()
-
     retriever = EvaluateRetrieval(score_function="dot")
     retrieval_result = retriever.evaluate(qrels, results, retriever.k_values)
     print(retrieval_result)
