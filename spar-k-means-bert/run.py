@@ -229,3 +229,8 @@ if __name__ == '__main__':
     retriever = EvaluateRetrieval(score_function="dot")
     retrieval_result = retriever.evaluate(qrels, results, retriever.k_values)
     print(retrieval_result)
+    with open("retrieval_results.txt", "a") as f:
+        f.write(str(args))
+        f.write("\n")
+        f.write(str(retrieval_result))
+        f.write("\n\n")
