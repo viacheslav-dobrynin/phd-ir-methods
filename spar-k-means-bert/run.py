@@ -113,11 +113,10 @@ def build_doc_id_to_embs():
 
 
 def build_hnsw_index():
-    base_path = "./"
-    hnsw_file_name = f"{base_path}hnsw.index"
-    faiss_idx_to_token_file_name = f"{base_path}faiss_idx_to_token.pickle"
+    hnsw_file_name = f"{args.base_path}hnsw.index"
+    faiss_idx_to_token_file_name = f"{args.base_path}faiss_idx_to_token.pickle"
 
-    if os.path.isfile(hnsw_file_name) and os.path.isfile(faiss_idx_to_token_file_name):
+    if args.use_cache and os.path.isfile(hnsw_file_name) and os.path.isfile(faiss_idx_to_token_file_name):
         with open(faiss_idx_to_token_file_name, "rb") as f:
             return read_index(hnsw_file_name), pickle.load(f)
 
@@ -152,6 +151,15 @@ def build_hnsw_index():
 
 
 def build_inverted_index():
+    inverted_index_file_name = f"{args.base_path}inverted_index.pickle"
+
+    if args.use_cache and os.path.isfile(inverted_index_file_name):
+        with open(inverted_index_file_name, "rb") as f:
+            return pickle.load(f)
+
+    if os.path.isfile(inverted_index_file_name):
+        os.remove(inverted_index_file_name)
+
     inverted_index = InvertedIndex()
     for token, doc_ids in tqdm.tqdm(iterable=token_to_doc_ids.items(), desc="build_inverted_index"):
         contextualized_embs_list = []
@@ -181,6 +189,10 @@ def build_inverted_index():
             assert len(token_and_cluster_id_list) == len(scores)
             for token_and_cluster_id, score in zip(token_and_cluster_id_list, scores):
                 inverted_index.add(token_and_cluster_id, (doc_id, score))
+
+    with open(inverted_index_file_name, "wb") as f:
+        pickle.dump(inverted_index, f)
+
     return inverted_index
 
 
@@ -208,6 +220,8 @@ if __name__ == '__main__':
     parser.add_argument('-in', '--index-n-neighbors', type=int, default=8, help='index neighbors number (default 8)')
     parser.add_argument('-stk', '--search-top-k', type=int, default=1000, help='search tok k results (default 1000)')
     parser.add_argument('-sn', '--search-n-neighbors', type=int, default=3, help='search neighbors number (default 3)')
+    parser.add_argument('-c', '--use-cache', action="store_true", help='use cache (default False)')
+    parser.add_argument('-p', '--base-path', type=str, default='./', help='base path (default ./)')
     args = parser.parse_args()
     print(f"Params: {args}")
     # Data, tokenizer, model
