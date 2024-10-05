@@ -20,6 +20,7 @@ class CorpusDataset(Dataset):
 
     def __init__(self, corpus):
         self.doc_ids = list(corpus.keys())
+        self.doc_id_to_idx = {doc_id: idx for idx, doc_id in enumerate(self.doc_ids)}
         docs = list(corpus.values())
         self.docs_len = len(docs)
         self.tokenized_docs = tokenize(docs).to(DEVICE)
@@ -29,6 +30,11 @@ class CorpusDataset(Dataset):
 
     def __getitem__(self, item):
         return self.doc_ids[item], self.tokenized_docs['input_ids'][item], self.tokenized_docs['attention_mask'][item]
+
+    def get_by_doc_id(self, doc_id, device="cpu"):
+        idx = self.doc_id_to_idx[doc_id]
+        return (self.tokenized_docs['input_ids'][idx].to(device).unsqueeze(0),
+                self.tokenized_docs['attention_mask'][idx].to(device).unsqueeze(0))
 
 
 def load_model():
@@ -59,7 +65,8 @@ def tokenize(texts):
 
 
 def get_contextualized_embs(token, doc_id):
-    input_ids, _, embs = doc_id_to_embs[doc_id]
+    input_ids, _ = dataset.get_by_doc_id(doc_id)
+    embs = doc_id_to_embs[doc_id]
     idxs = torch.nonzero(input_ids == token, as_tuple=True)
     return embs[idxs]
 
@@ -104,11 +111,8 @@ def build_doc_id_to_embs():
     for doc_ids, token_ids_batch, attention_mask in tqdm.tqdm(iterable=dataloader, desc="encode_to_token_embs"):
         embs = encode_to_token_embs(input_ids=token_ids_batch, attention_mask=attention_mask)
         embs = embs.cpu()
-        token_ids_batch = token_ids_batch.cpu()
-        attention_mask = attention_mask.cpu()
         for idx, doc_id in enumerate(doc_ids):
-            doc_id_to_embs[doc_id] = (
-            token_ids_batch[idx].unsqueeze(0), attention_mask[idx].unsqueeze(0), embs[idx].unsqueeze(0))
+            doc_id_to_embs[doc_id] = embs[idx].unsqueeze(0)
     return doc_id_to_embs
 
 
@@ -166,7 +170,8 @@ def build_inverted_index():
         doc_ids_list = []
         doc_id_to_doc_emb = {}
         for doc_id in doc_ids:
-            input_ids, attention_mask, embs = doc_id_to_embs[doc_id]
+            input_ids, attention_mask = dataset.get_by_doc_id(doc_id)
+            embs = doc_id_to_embs[doc_id]
             idxs = torch.nonzero(input_ids == token, as_tuple=True)
             assert idxs[1].numel() != 0
             contextualized_embs = embs[idxs]
