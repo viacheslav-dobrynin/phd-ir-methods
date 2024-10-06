@@ -154,10 +154,10 @@ class VectorIndex:
     def reconstruct(self, ids):
         return self.hnsw_index.reconstruct_batch(ids)
 
-    def _get_index_filename(filename: str) -> str:
+    def _get_index_filename(self, filename: str) -> str:
         return f"{filename}hnsw.index"
 
-    def _get_mapping_filename(filename: str) -> str:
+    def _get_mapping_filename(self, filename: str) -> str:
         return f"{filename}faiss_idx_to_token.pickle"
     
 def load_model() -> AutoModel:
@@ -256,7 +256,7 @@ def build_inverted_index(args,
     if os.path.isfile(inverted_index_file_name):
         os.remove(inverted_index_file_name)
 
-    inverted_index = InvertedIndex(model)
+    inverted_index = InvertedIndex(model, vector_index)
     for token, doc_ids in tqdm.tqdm(iterable=token_to_doc_ids.items(), desc="build_inverted_index"):
         contextualized_embs_list = []
         doc_ids_list= []
