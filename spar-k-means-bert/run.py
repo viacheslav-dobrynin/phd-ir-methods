@@ -130,6 +130,8 @@ def build_hnsw_index():
         os.remove(faiss_idx_to_token_file_name)
 
     hnsw_index = faiss.IndexHNSWFlat(model.config.hidden_size, args.hnsw_M)
+    hnsw_index.hnsw.efSearch = args.hnsw_ef_search
+    hnsw_index.hnsw.efConstruction = args.hnsw_ef_construction
     faiss_idx_to_token = {}
 
     for token, doc_ids in tqdm.tqdm(iterable=token_to_doc_ids.items(), desc="build_hnsw"):
@@ -223,6 +225,8 @@ if __name__ == '__main__':
     parser.add_argument('-b', '--batch-size', type=int, default=128, help='batch size (default 128)')
     parser.add_argument('-kmn', '--kmeans-n-clusters', type=int, default=8, help='kmeans clusters number (default 8)')
     parser.add_argument('-M', '--hnsw-M', type=int, default=32, help='the number of neighbors used in the graph. A larger M is more accurate but uses more memory (default 32)')
+    parser.add_argument('-efs', '--hnsw-ef-search', type=int, default=16, help='HNSW ef search param (default 16)')
+    parser.add_argument('-efc', '--hnsw-ef-construction', type=int, default=40, help='HNSW ef construction param (default 40)')
     parser.add_argument('-in', '--index-n-neighbors', type=int, default=8, help='index neighbors number (default 8)')
     parser.add_argument('-stk', '--search-top-k', type=int, default=1000, help='search tok k results (default 1000)')
     parser.add_argument('-sn', '--search-n-neighbors', type=int, default=3, help='search neighbors number (default 3)')
