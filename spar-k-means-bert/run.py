@@ -108,14 +108,15 @@ class VectorIndex:
             embs = np.concatenate(emb_batches)
 
             n_clusters=args.kmeans_n_clusters if len(embs) > args.kmeans_n_clusters else len(embs)
-            kmeans = faiss.Kmeans(d=embs.shape[1], k=n_clusters, niter=20, verbose=False)
-            kmeans.train(embs)
+            kmeans = sklearn.cluster.KMeans(n_clusters, init='k-means++', n_init='auto')
+
+            kmeans.fit(embs)
 
             #TODO fix training
             if self.hnsw_index.is_trained is not None and not self.hnsw_index.is_trained:
                 self.hnsw_index.train(embs)
 
-            for i, centroid in enumerate(kmeans.centroids):
+            for i, centroid in enumerate(kmeans.cluster_centers_):
                 self.hnsw_index.add(np.array([centroid]))
                 self.faiss_idx_to_token[self.hnsw_index.ntotal - 1] = (token, i)
 
@@ -333,7 +334,6 @@ def map_corpus(corpus, sep = " "):
 if __name__ == '__main__':
     # Hyperparameters
     args = get_cmd_args()
-    args.dataset_length = 100
     # Data, tokenizer, model
     tokenizer = AutoTokenizer.from_pretrained(BACKBONE_MODEL_ID, use_fast=True)
     corpus, queries, qrels = load_dataset(dataset=args.dataset)
