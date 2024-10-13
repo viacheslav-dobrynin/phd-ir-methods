@@ -82,6 +82,7 @@ class InvertedIndex:
         contextualized_embs = encode_to_token_embs(**tokenize(query))
         doc_id_and_score_list = []
         for contextualized_emb in contextualized_embs.squeeze(0):
+            # TODO: use batch search
             _, I = hnsw_index.search(np.array([contextualized_emb.cpu().detach().numpy()]), n_neighbors)
             token_and_cluster_id_list = [faiss_idx_to_token[id] for id in I[0].tolist()]
             for token_and_cluster_id in token_and_cluster_id_list:
@@ -167,30 +168,14 @@ def build_inverted_index():
         os.remove(inverted_index_file_name)
 
     inverted_index = InvertedIndex()
-    for token, doc_ids in tqdm.tqdm(iterable=token_to_doc_ids.items(), desc="build_inverted_index"):
-        contextualized_embs_list = []
-        doc_ids_list = []
-        doc_id_to_doc_emb = {}
-        for doc_id in doc_ids:
-            input_ids, attention_mask = dataset.get_by_doc_id(doc_id)
-            embs = doc_id_to_embs[doc_id]
-            idxs = torch.nonzero(input_ids == token, as_tuple=True)
-            assert idxs[1].numel() != 0
-            contextualized_embs = embs[idxs]
-            contextualized_embs_list.append(contextualized_embs)
-            doc_ids_list.extend([doc_id] * contextualized_embs.shape[0])
-            doc_id_to_doc_emb[doc_id] = mean_pooling(embs, attention_mask).cpu().detach().numpy()
-
-        assert len(contextualized_embs_list) != 0
-
-        contextualized_embs = torch.cat(contextualized_embs_list, dim=0).cpu().detach().numpy()
-
-        _, I = hnsw_index.search(contextualized_embs, args.index_n_neighbors)
-        assert len(I) == len(contextualized_embs)
-        for idx in range(len(contextualized_embs)):
-            doc_id = doc_ids_list[idx]
+    for doc_id, contextualized_embs in tqdm.tqdm(iterable=doc_id_to_embs.items(), desc="build_inverted_index"):
+        _, attention_mask = dataset.get_by_doc_id(doc_id)
+        doc_emb = mean_pooling(contextualized_embs, attention_mask).cpu().detach().numpy()
+        contextualized_embs_np = contextualized_embs.squeeze(0).cpu().detach().numpy()
+        _, I = hnsw_index.search(contextualized_embs_np, args.index_n_neighbors)
+        assert len(I) == len(contextualized_embs_np)
+        for idx in range(len(contextualized_embs_np)):
             token_and_cluster_id_list = [faiss_idx_to_token[id] for id in I[idx]]
-            doc_emb = doc_id_to_doc_emb[doc_id]
             centroids = hnsw_index.reconstruct_batch(I[idx])
             scores = np.squeeze(doc_emb @ centroids.T, 0)
             assert len(token_and_cluster_id_list) == len(scores)
