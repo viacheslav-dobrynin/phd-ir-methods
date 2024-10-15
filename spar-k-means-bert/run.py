@@ -130,6 +130,7 @@ def build_hnsw_index():
     if os.path.isfile(faiss_idx_to_token_file_name):
         os.remove(faiss_idx_to_token_file_name)
 
+    token_to_doc_ids = build_token_to_doc_ids()
     hnsw_index = faiss.IndexHNSWFlat(model.config.hidden_size, args.hnsw_M)
     hnsw_index.hnsw.efSearch = args.hnsw_ef_search
     hnsw_index.hnsw.efConstruction = args.hnsw_ef_construction
@@ -230,7 +231,6 @@ if __name__ == '__main__':
     dataloader = DataLoader(dataset=dataset, batch_size=args.batch_size)
     model = load_model()
     # Indexing
-    token_to_doc_ids = build_token_to_doc_ids()
     doc_id_to_embs = build_doc_id_to_embs()
     hnsw_index, faiss_idx_to_token = build_hnsw_index()
     inverted_index = build_inverted_index()
