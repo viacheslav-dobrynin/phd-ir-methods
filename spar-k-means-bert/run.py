@@ -78,13 +78,14 @@ class InvertedIndex:
     def add(self, token_and_cluster_id, doc_id_and_score):
         self.index[token_and_cluster_id].add(doc_id_and_score)
 
-    def search(self, query, top_k, n_neighbors=3):
+    def search(self, query, top_k, n_neighbors):
         contextualized_embs = encode_to_token_embs(**tokenize(query))
         doc_id_and_score_list = []
-        for contextualized_emb in contextualized_embs.squeeze(0):
-            # TODO: use batch search
-            _, I = hnsw_index.search(np.array([contextualized_emb.cpu().detach().numpy()]), n_neighbors)
-            token_and_cluster_id_list = [faiss_idx_to_token[id] for id in I[0].tolist()]
+        contextualized_embs_np = contextualized_embs.squeeze(0).cpu().detach().numpy()
+        _, I = hnsw_index.search(contextualized_embs_np, n_neighbors)
+        assert len(I) == len(contextualized_embs_np)
+        for idx in range(len(I)):
+            token_and_cluster_id_list = [faiss_idx_to_token[id] for id in I[idx].tolist()]
             for token_and_cluster_id in token_and_cluster_id_list:
                 for doc_id_and_score in self.index[token_and_cluster_id]:
                     doc_id_and_score_list.append(doc_id_and_score)
@@ -175,7 +176,7 @@ def build_inverted_index():
         contextualized_embs_np = contextualized_embs.squeeze(0).cpu().detach().numpy()
         _, I = hnsw_index.search(contextualized_embs_np, args.index_n_neighbors)
         assert len(I) == len(contextualized_embs_np)
-        for idx in range(len(contextualized_embs_np)):
+        for idx in range(len(I)):
             token_and_cluster_id_list = [faiss_idx_to_token[id] for id in I[idx]]
             centroids = hnsw_index.reconstruct_batch(I[idx])
             scores = np.squeeze(doc_emb @ centroids.T, 0)
