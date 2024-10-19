@@ -1,4 +1,5 @@
 import argparse
+import os
 import pickle
 from collections import defaultdict
 
@@ -11,9 +12,9 @@ from beir.retrieval.evaluation import EvaluateRetrieval
 from faiss import read_index, write_index
 from torch.utils.data import Dataset, DataLoader
 from transformers import AutoTokenizer, AutoModel
-import os
+
 from dataset import load_dataset
-from params import BACKBONE_MODEL_ID, DEVICE
+from params import DEVICE
 
 
 class CorpusDataset(Dataset):
@@ -38,7 +39,7 @@ class CorpusDataset(Dataset):
 
 
 def load_model():
-    model = AutoModel.from_pretrained(BACKBONE_MODEL_ID).to(DEVICE)
+    model = AutoModel.from_pretrained(args.backbone_model_id).to(DEVICE)
     model.eval()
     for p in model.parameters():
         p.requires_grad = False
@@ -207,6 +208,7 @@ def perform_searches():
 if __name__ == '__main__':
     # Hyperparameters
     parser = argparse.ArgumentParser()
+    parser.add_argument('-mid', '--backbone-model-id', type=str, default='sentence-transformers/msmarco-distilbert-dot-v5', help='backbone model id (default sentence-transformers/msmarco-distilbert-dot-v5)')
     parser.add_argument('-d', '--dataset', type=str, default='scifact', help='BEIR dataset name (default scifact)')
     parser.add_argument('-l', '--dataset-length', type=int, default=-1, help='Dataset length (default -1, all dataset)')
     parser.add_argument('-b', '--batch-size', type=int, default=128, help='batch size (default 128)')
@@ -222,7 +224,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     print(f"Params: {args}")
     # Data, tokenizer, model
-    tokenizer = AutoTokenizer.from_pretrained(BACKBONE_MODEL_ID, use_fast=True)
+    tokenizer = AutoTokenizer.from_pretrained(args.backbone_model_id, use_fast=True)
     corpus, queries, qrels = load_dataset(dataset=args.dataset)
     sep = " "
     corpus = {doc_id: (doc["title"] + sep + doc["text"]).strip() for i, (doc_id, doc) in enumerate(corpus.items())
