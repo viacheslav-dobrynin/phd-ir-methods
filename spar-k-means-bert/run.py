@@ -80,7 +80,10 @@ class InvertedIndex:
         self.index[token_and_cluster_id].add(doc_id_and_score)
 
     def search(self, query, top_k, n_neighbors):
-        contextualized_embs = encode_to_token_embs(**tokenize(query))
+        tokenized_query = tokenize(query)
+        contextualized_embs = encode_to_token_embs(
+            input_ids=tokenized_query["input_ids"],
+            attention_mask=tokenized_query["attention_mask"])
         doc_id_and_score_list = []
         contextualized_embs_np = contextualized_embs.squeeze(0).cpu().detach().numpy()
         _, I = hnsw_index.search(contextualized_embs_np, n_neighbors)
