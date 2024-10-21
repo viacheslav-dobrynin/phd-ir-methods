@@ -1,0 +1,13 @@
+name: spar-k-means-bert
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.12
+  - faiss-gpu
+  - pytorch
+  - nltk
+  - pip:
+      - beir
