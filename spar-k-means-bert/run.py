@@ -9,7 +9,6 @@ import sklearn.cluster
 import torch
 import tqdm
 from beir.retrieval.evaluation import EvaluateRetrieval
-from faiss import read_index, write_index
 from torch.utils.data import Dataset, DataLoader
 from transformers import AutoTokenizer, AutoModel
 
@@ -128,7 +127,7 @@ def build_hnsw_index():
 
     if args.use_cache and os.path.isfile(hnsw_file_name) and os.path.isfile(faiss_idx_to_token_file_name):
         with open(faiss_idx_to_token_file_name, "rb") as f:
-            return read_index(hnsw_file_name), pickle.load(f)
+            return faiss.read_index(hnsw_file_name), pickle.load(f)
 
     if os.path.isfile(hnsw_file_name):
         os.remove(hnsw_file_name)
@@ -137,7 +136,6 @@ def build_hnsw_index():
 
     token_to_doc_ids = build_token_to_doc_ids()
     hnsw_index = faiss.IndexHNSWFlat(model.config.hidden_size, args.hnsw_M)
-    hnsw_index.hnsw.efSearch = args.hnsw_ef_search
     hnsw_index.hnsw.efConstruction = args.hnsw_ef_construction
     faiss_idx_to_token = {}
 
@@ -156,10 +154,10 @@ def build_hnsw_index():
             hnsw_index.add(np.array([centroid]))
             faiss_idx_to_token[hnsw_index.ntotal - 1] = (token, i)
 
-    write_index(hnsw_index, hnsw_file_name)
+    faiss.write_index(hnsw_index, hnsw_file_name)
     with open(faiss_idx_to_token_file_name, "wb") as f:
         pickle.dump(faiss_idx_to_token, f)
-
+    print(f"Constructed HNSW levels: {np.bincount(faiss.vector_to_array(hnsw_index.hnsw.levels))}")
     return hnsw_index, faiss_idx_to_token
 
 
@@ -211,7 +209,7 @@ def perform_searches():
 if __name__ == '__main__':
     # Hyperparameters
     parser = argparse.ArgumentParser()
-    parser.add_argument('-mid', '--backbone-model-id', type=str, default='sentence-transformers/msmarco-distilbert-dot-v5', help='backbone model id (default sentence-transformers/msmarco-distilbert-dot-v5)')
+    parser.add_argument('-mid', '--backbone-model-id', type=str, default='sentence-transformers/all-MiniLM-L6-v2', help='backbone model id (default sentence-transformers/all-MiniLM-L6-v2)')
     parser.add_argument('-d', '--dataset', type=str, default='scifact', help='BEIR dataset name (default scifact)')
     parser.add_argument('-l', '--dataset-length', type=int, default=-1, help='Dataset length (default -1, all dataset)')
     parser.add_argument('-b', '--batch-size', type=int, default=128, help='batch size (default 128)')
@@ -239,6 +237,7 @@ if __name__ == '__main__':
     # Indexing
     doc_id_to_embs = build_doc_id_to_embs()
     hnsw_index, faiss_idx_to_token = build_hnsw_index()
+    hnsw_index.hnsw.efSearch = args.hnsw_ef_search
     inverted_index = build_inverted_index()
     # Retrieval
     results = perform_searches()

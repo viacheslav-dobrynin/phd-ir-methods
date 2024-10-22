@@ -10,7 +10,7 @@ from dataset import load_dataset
 corpus, queries, qrels = load_dataset()
 print(f"Corpus size={len(corpus)}, queries size={len(queries)}, qrels size={len(qrels)}")
 
-model = models.SentenceBERT("msmarco-distilbert-dot-v5")
+model = models.SentenceBERT("all-MiniLM-L6-v2")
 faiss_search = HNSWFaissSearch(model,
                                batch_size=128,
                                hnsw_store_n=512,
