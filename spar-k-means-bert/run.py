@@ -242,10 +242,15 @@ if __name__ == '__main__':
     # Retrieval
     results = perform_searches()
     retriever = EvaluateRetrieval(score_function="dot")
-    retrieval_result = retriever.evaluate(qrels, results, retriever.k_values)
-    print(retrieval_result)
+    ndcg, _map, recall, precision = retriever.evaluate(qrels, results, retriever.k_values)
+    mrr = retriever.evaluate_custom(qrels, results, retriever.k_values, metric="mrr")
+    print(ndcg, _map, recall, precision, mrr)
     with open("retrieval_results.txt", "a") as f:
         f.write(str(args))
         f.write("\n")
-        f.write(str(retrieval_result))
+        f.write(str(ndcg))
+        f.write(str(_map))
+        f.write(str(recall))
+        f.write(str(precision))
+        f.write(str(mrr))
         f.write("\n\n")
