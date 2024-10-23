@@ -92,5 +92,10 @@ sparse_model = SparseSearch(SPARTA(model_path), batch_size=128)
 retriever = EvaluateRetrieval(sparse_model, score_function="dot") # or "dot" for dot-product
 results = retriever.retrieve(corpus, queries)
 #### Evaluate your retrieval using NDCG@k, MAP@K ...
-retrieval_result = retriever.evaluate(qrels, results, retriever.k_values)
-print(retrieval_result)
+ndcg, _map, recall, precision = retriever.evaluate(qrels, results, retriever.k_values)
+mrr = retriever.evaluate_custom(qrels, results, retriever.k_values, metric="mrr")
+print(ndcg)
+print(mrr)
+print(_map)
+print(recall)
+print(precision)

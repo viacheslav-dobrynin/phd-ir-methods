@@ -27,5 +27,10 @@ os.makedirs(output_dir, exist_ok=True)
 if not os.path.exists(os.path.join(output_dir, "{}.{}.faiss".format(prefix, ext))):
     faiss_search.save(output_dir=output_dir, prefix=prefix, ext=ext)
 #### Evaluate your retrieval using NDCG@k, MAP@K ...
-retrieval_result = retriever.evaluate(qrels, results, retriever.k_values)
-print(retrieval_result)
+ndcg, _map, recall, precision = retriever.evaluate(qrels, results, retriever.k_values)
+mrr = retriever.evaluate_custom(qrels, results, retriever.k_values, metric="mrr")
+print(ndcg)
+print(mrr)
+print(_map)
+print(recall)
+print(precision)
