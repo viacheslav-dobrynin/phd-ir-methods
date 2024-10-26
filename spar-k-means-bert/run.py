@@ -220,6 +220,7 @@ if __name__ == '__main__':
     parser.add_argument('-in', '--index-n-neighbors', type=int, default=8, help='index neighbors number (default 8)')
     parser.add_argument('-stk', '--search-top-k', type=int, default=1000, help='search tok k results (default 1000)')
     parser.add_argument('-sn', '--search-n-neighbors', type=int, default=3, help='search neighbors number (default 3)')
+    parser.add_argument('--train-hnsw-only', action="store_true", help='train hnsw only (default False)')
     parser.add_argument('-c', '--use-cache', action="store_true", help='use cache (default False)')
     parser.add_argument('-p', '--base-path', type=str, default='./', help='base path (default ./)')
     args = parser.parse_args()
@@ -237,6 +238,9 @@ if __name__ == '__main__':
     # Indexing
     doc_id_to_embs = build_doc_id_to_embs()
     hnsw_index, faiss_idx_to_token = build_hnsw_index()
+    if args.train_hnsw_only:
+        print("HNSW index is trained")
+        exit(0) # TODO: extract to function and use return
     hnsw_index.hnsw.efSearch = args.hnsw_ef_search
     inverted_index = build_inverted_index()
     # Retrieval
