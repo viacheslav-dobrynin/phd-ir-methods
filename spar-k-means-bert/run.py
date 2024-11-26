@@ -176,19 +176,16 @@ def build_inverted_index():
 
     inverted_index = InvertedIndex()
     for doc_id, contextualized_embs in tqdm.tqdm(iterable=doc_id_to_embs.items(), desc="build_inverted_index"):
-        _, attention_mask = dataset.get_by_doc_id(doc_id)
-        # doc_emb = mean_pooling(contextualized_embs, attention_mask).cpu().detach().numpy()
-        contextualized_embs_np = contextualized_embs.squeeze(0).cpu().detach().numpy()
-        _, I = hnsw_index.search(contextualized_embs_np, args.index_n_neighbors)
-        assert len(I) == len(contextualized_embs_np)
+        contextualized_embs = contextualized_embs.squeeze(0)
+        _, I = hnsw_index.search(contextualized_embs, args.index_n_neighbors)
+        assert len(I) == len(contextualized_embs)
         for idx in range(len(I)):
             token_and_cluster_id_list = [faiss_idx_to_token[id] for id in I[idx]]
-            centroids = hnsw_index.reconstruct_batch(I[idx])
-            # scores = np.squeeze(doc_emb @ centroids.T, 0) # Dot product
-            scores = np.max(contextualized_embs_np @ centroids.T, axis=0) # MaxSim
-            # scores = D[idx]
+            centroids = torch.from_numpy(hnsw_index.reconstruct_batch(I[idx]))
+            scores = torch.max(contextualized_embs @ centroids.T, dim=0).values # MaxSim
             assert len(token_and_cluster_id_list) == len(scores)
             for token_and_cluster_id, score in zip(token_and_cluster_id_list, scores):
+                score = score.item()
                 inverted_index.add(token_and_cluster_id, (doc_id, score))
 
     with open(inverted_index_file_name, "wb") as f:
