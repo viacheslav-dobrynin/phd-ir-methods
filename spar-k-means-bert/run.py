@@ -14,7 +14,6 @@ from transformers import AutoTokenizer, AutoModel
 
 from dataset import load_dataset
 from params import DEVICE
-from util.model import build_encode_dense_fun
 
 
 class CorpusDataset(Dataset):
@@ -89,7 +88,6 @@ class InvertedIndex:
         _, I = hnsw_index.search(contextualized_embs_np, n_neighbors)
         assert len(I) == len(contextualized_embs_np)
         for idx in range(len(I)):
-            # token_and_cluster_id_list = [faiss_idx_to_token[id] for id in I[idx][D[idx] > threshold]]
             token_and_cluster_id_list = [faiss_idx_to_token[id] for id in I[idx].tolist()]
             for token_and_cluster_id in token_and_cluster_id_list:
                 for doc_id_and_score in self.index[token_and_cluster_id]:
@@ -138,7 +136,6 @@ def build_hnsw_index():
 
     token_to_doc_ids = build_token_to_doc_ids()
     hnsw_index = faiss.IndexHNSWFlat(model.config.hidden_size, args.hnsw_M)
-    # hnsw_index = faiss.IndexHNSWFlat(model.config.hidden_size, args.hnsw_M, faiss.METRIC_INNER_PRODUCT)
     hnsw_index.hnsw.efConstruction = args.hnsw_ef_construction
     faiss_idx_to_token = {}
 
@@ -237,10 +234,6 @@ if __name__ == '__main__':
     dataset = CorpusDataset(corpus)
     dataloader = DataLoader(dataset=dataset, batch_size=args.batch_size)
     model = load_model()
-    encode_dense = build_encode_dense_fun(tokenizer=tokenizer, model=model)
-    threshold = 0.1 * encode_dense("She enjoys reading books in her free time.") @ encode_dense("In her leisure hours, she likes to read novels.").T
-    threshold = threshold.squeeze(0).cpu().detach().numpy()
-    print(f"Dense similarity threshold: {threshold}")
     # Indexing
     doc_id_to_embs = build_doc_id_to_embs()
     hnsw_index, faiss_idx_to_token = build_hnsw_index()
