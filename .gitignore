@@ -13,5 +13,7 @@ input.txt
 env/
 venv/
 tools/pylucene-*
+tools/jcc/
+tools/lucene/
 runs/
 datasets/
