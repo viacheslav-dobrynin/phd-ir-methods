@@ -73,7 +73,8 @@ public class FieldValueAsScoreQuery extends Query {
 
                     @Override
                     public long cost() {
-                        throw new UnsupportedOperationException();
+                        // TODO: impl it properly
+                        return 0;
                     }
                 };
             }
