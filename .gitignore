@@ -12,6 +12,6 @@ __pycache__/
 input.txt
 env/
 venv/
-tools/pylucene-9.10.0
+tools/pylucene-*
 runs/
 datasets/
