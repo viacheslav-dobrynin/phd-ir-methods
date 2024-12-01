@@ -1,15 +1,16 @@
 [versions]
 djl = "0.28.0"
-lucene = "9.11.0"
+lucene = "10.0.0"
 
 [libraries]
 djl-bom = { module = "ai.djl:bom", version.ref = "djl" }
 djl-pytorch-engine = { module = "ai.djl.pytorch:pytorch-engine" }
 lucene-core = { module = "org.apache.lucene:lucene-core", version.ref = "lucene" }
 lucene-queryparser = { module = "org.apache.lucene:lucene-queryparser", version.ref = "lucene" }
+lucene-expressions = { module = "org.apache.lucene:lucene-expressions", version.ref = "lucene" }
 
 [bundles]
-lucene = ["lucene-core", "lucene-queryparser"]
+lucene = ["lucene-core", "lucene-queryparser", "lucene-expressions"]
 
 [plugins]
 versions = { id = "com.github.ben-manes.versions", version = "0.45.0" }

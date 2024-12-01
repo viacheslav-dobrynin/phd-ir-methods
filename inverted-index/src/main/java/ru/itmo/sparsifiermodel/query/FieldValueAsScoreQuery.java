@@ -38,32 +38,42 @@ public class FieldValueAsScoreQuery extends Query {
             }
 
             @Override
-            public Scorer scorer(LeafReaderContext context) throws IOException {
-                return new Scorer(this) {
-
-                    private final NumericDocValues iterator = context.reader().getNumericDocValues(field);
-
+            public ScorerSupplier scorerSupplier(LeafReaderContext context) {
+                return new ScorerSupplier() {
                     @Override
-                    public float score() throws IOException {
-                        final int docId = docID();
-                        assert docId != DocIdSetIterator.NO_MORE_DOCS;
-                        assert iterator.advanceExact(docId);
-                        return Float.intBitsToFloat((int) iterator.longValue()) * queryTermValue * boost;
+                    public Scorer get(long leadCost) throws IOException {
+                        return new Scorer() {
+
+                            private final NumericDocValues iterator = context.reader().getNumericDocValues(field);
+
+                            @Override
+                            public float score() throws IOException {
+                                final int docId = docID();
+                                assert docId != DocIdSetIterator.NO_MORE_DOCS;
+                                assert iterator.advanceExact(docId);
+                                return Float.intBitsToFloat((int) iterator.longValue()) * queryTermValue * boost;
+                            }
+
+                            @Override
+                            public int docID() {
+                                return iterator.docID();
+                            }
+
+                            @Override
+                            public DocIdSetIterator iterator() {
+                                return iterator == null ? DocIdSetIterator.empty() : iterator;
+                            }
+
+                            @Override
+                            public float getMaxScore(int upTo) {
+                                return Float.MAX_VALUE;
+                            }
+                        };
                     }
 
                     @Override
-                    public int docID() {
-                        return iterator.docID();
-                    }
-
-                    @Override
-                    public DocIdSetIterator iterator() {
-                        return iterator == null ? DocIdSetIterator.empty() : iterator;
-                    }
-
-                    @Override
-                    public float getMaxScore(int upTo) {
-                        return Float.MAX_VALUE;
+                    public long cost() {
+                        throw new UnsupportedOperationException();
                     }
                 };
             }
