@@ -87,11 +87,10 @@ class InvertedIndex:
         contextualized_embs_np = contextualized_embs.squeeze(0).cpu().detach().numpy()
         _, I = hnsw_index.search(contextualized_embs_np, n_neighbors)
         assert len(I) == len(contextualized_embs_np)
-        for idx in range(len(I)):
-            token_and_cluster_id_list = [faiss_idx_to_token[id] for id in I[idx].tolist()]
-            for token_and_cluster_id in token_and_cluster_id_list:
-                for doc_id_and_score in self.index[token_and_cluster_id]:
-                    doc_id_and_score_list.append(doc_id_and_score)
+        token_and_cluster_id_list = list(map(lambda idx: faiss_idx_to_token[idx], I.flatten()))
+        for token_and_cluster_id in token_and_cluster_id_list:
+            for doc_id_and_score in self.index[token_and_cluster_id]:
+                doc_id_and_score_list.append(doc_id_and_score)
 
         doc_id_to_score = defaultdict(float)
         for doc_id, score in doc_id_and_score_list:
