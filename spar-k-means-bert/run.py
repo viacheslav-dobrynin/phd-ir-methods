@@ -151,7 +151,7 @@ def build_hnsw_index():
         kmeans.fit(embs)
         for i, centroid in enumerate(kmeans.cluster_centers_):
             hnsw_index.add(np.array([centroid]))
-            faiss_idx_to_token[hnsw_index.ntotal - 1] = f"{token}_{i})"
+            faiss_idx_to_token[hnsw_index.ntotal - 1] = f"{token}_{i}"
 
     faiss.write_index(hnsw_index, hnsw_file_name)
     with open(faiss_idx_to_token_file_name, "wb") as f:
