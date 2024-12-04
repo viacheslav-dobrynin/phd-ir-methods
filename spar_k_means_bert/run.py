@@ -99,19 +99,12 @@ class InvertedIndex:
         query_ids = list(queries.keys())
         for query_id in tqdm.tqdm(iterable=query_ids, desc="search"):
             token_and_cluster_id_list = token_and_cluster_id_calculator(queries[query_id])
-            doc_id_and_score_list = []
-            for token_and_cluster_id in token_and_cluster_id_list:
-                for doc_id_and_score in self.inverted_index[token_and_cluster_id]:
-                    doc_id_and_score_list.append(doc_id_and_score)
-
             doc_id_to_score = defaultdict(float)
-            for doc_id, score in doc_id_and_score_list:
-                doc_id_to_score[doc_id] += score
+            for token_and_cluster_id in token_and_cluster_id_list:
+                for doc_id, score in self.inverted_index[token_and_cluster_id]:
+                    doc_id_to_score[doc_id] += score
             doc_id_and_score_list = sorted(doc_id_to_score.items(), key=lambda e: e[1], reverse=True)[:top_k]
-            query_result = {}
-            for doc_id, score in doc_id_and_score_list:
-                query_result[doc_id] = score
-            results[query_id] = query_result
+            results[query_id] = dict(doc_id_and_score_list)
         return results
 
 
