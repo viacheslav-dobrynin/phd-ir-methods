@@ -14,6 +14,7 @@ from transformers import AutoTokenizer, AutoModel
 
 from dataset import load_dataset
 from params import DEVICE
+from spar_k_means_bert.lucene_index import LuceneIndex
 
 
 class CorpusDataset(Dataset):
@@ -72,31 +73,46 @@ def get_contextualized_embs(token, doc_id):
 
 
 class InvertedIndex:
-    def __init__(self):
+    def __init__(self, base_path: str, use_cache: bool):
+        self.index_file = f"{base_path}inverted_index.pickle"
         self.inverted_index = defaultdict(set)
+        if os.path.isfile(self.index_file):
+            if use_cache:
+                with open(self.index_file, "rb") as f:
+                    self.inverted_index = pickle.load(f)
+            else:
+                os.remove(self.index_file)
 
     def index(self, doc_id: int, tokens_and_scores: dict):
         for token_and_cluster_id, score in tokens_and_scores.items():
             self.inverted_index[token_and_cluster_id].add((doc_id, score))
 
-    def search(self, query, top_k, n_neighbors):
-        tokenized_query = tokenize(query)
-        contextualized_embs = encode_to_token_embs(
-            input_ids=tokenized_query["input_ids"],
-            attention_mask=tokenized_query["attention_mask"])
-        doc_id_and_score_list = []
-        contextualized_embs_np = contextualized_embs.squeeze(0).cpu().detach().numpy()
-        _, I = hnsw_index.search(contextualized_embs_np, n_neighbors)
-        assert len(I) == len(contextualized_embs_np)
-        token_and_cluster_id_list = list(map(lambda idx: faiss_idx_to_token[idx], I.flatten()))
-        for token_and_cluster_id in token_and_cluster_id_list:
-            for doc_id_and_score in self.inverted_index[token_and_cluster_id]:
-                doc_id_and_score_list.append(doc_id_and_score)
+    def complete_indexing(self):
+        with open(self.index_file, "wb") as f:
+            pickle.dump(self.inverted_index, f)
 
-        doc_id_to_score = defaultdict(float)
-        for doc_id, score in doc_id_and_score_list:
-            doc_id_to_score[doc_id] += score
-        return sorted(doc_id_to_score.items(), key=lambda e: e[1], reverse=True)[:top_k]
+    def size(self):
+        return len(self.inverted_index)
+
+    def search(self, queries, token_and_cluster_id_calculator, top_k=1000):
+        results = {}
+        query_ids = list(queries.keys())
+        for query_id in tqdm.tqdm(iterable=query_ids, desc="search"):
+            token_and_cluster_id_list = token_and_cluster_id_calculator(queries[query_id])
+            doc_id_and_score_list = []
+            for token_and_cluster_id in token_and_cluster_id_list:
+                for doc_id_and_score in self.inverted_index[token_and_cluster_id]:
+                    doc_id_and_score_list.append(doc_id_and_score)
+
+            doc_id_to_score = defaultdict(float)
+            for doc_id, score in doc_id_and_score_list:
+                doc_id_to_score[doc_id] += score
+            doc_id_and_score_list = sorted(doc_id_to_score.items(), key=lambda e: e[1], reverse=True)[:top_k]
+            query_result = {}
+            for doc_id, score in doc_id_and_score_list:
+                query_result[doc_id] = score
+            results[query_id] = query_result
+        return results
 
 
 def build_token_to_doc_ids():
@@ -162,16 +178,12 @@ def build_hnsw_index():
 
 
 def build_inverted_index():
-    inverted_index_file_name = f"{args.base_path}inverted_index.pickle"
-
-    if args.use_cache and os.path.isfile(inverted_index_file_name):
-        with open(inverted_index_file_name, "rb") as f:
-            return pickle.load(f)
-
-    if os.path.isfile(inverted_index_file_name):
-        os.remove(inverted_index_file_name)
-
-    inverted_index = InvertedIndex()
+    if args.in_memory_index:
+        inverted_index = InvertedIndex(args.base_path, args.use_cache)
+    else:
+        inverted_index = LuceneIndex(args.base_path, args.use_cache)
+    if inverted_index.size():
+        return inverted_index
     for doc_id, contextualized_embs in tqdm.tqdm(iterable=doc_id_to_embs.items(), desc="build_inverted_index"):
         contextualized_embs = contextualized_embs.squeeze(0)
         _, I = hnsw_index.search(contextualized_embs, args.index_n_neighbors)
@@ -185,25 +197,18 @@ def build_inverted_index():
         for token, score in zip(token_and_cluster_id_list, scores.cpu().detach().numpy()):
             deduplicated_tokens_and_scores[token] = score # this help to remove token repetition
         inverted_index.index(doc_id, deduplicated_tokens_and_scores)
-
-    with open(inverted_index_file_name, "wb") as f:
-        pickle.dump(inverted_index, f)
-
+    inverted_index.complete_indexing()
     return inverted_index
 
-
-def perform_searches(inverted_index: InvertedIndex):
-    results = {}
-    query_ids = list(queries.keys())
-    for query_id in tqdm.tqdm(iterable=query_ids, desc="search"):
-        doc_id_and_score_list = inverted_index.search(query=queries[query_id],
-                                                      top_k=args.search_top_k,
-                                                      n_neighbors=args.search_n_neighbors)
-        query_result = {}
-        for doc_id, score in doc_id_and_score_list:
-            query_result[doc_id] = score
-        results[query_id] = query_result
-    return results
+def query_tokens_calculator(query):
+    tokenized_query = tokenize(query)
+    contextualized_embs = encode_to_token_embs(
+        input_ids=tokenized_query["input_ids"],
+        attention_mask=tokenized_query["attention_mask"])
+    contextualized_embs_np = contextualized_embs.squeeze(0).cpu().detach().numpy()
+    _, I = hnsw_index.search(contextualized_embs_np, args.search_n_neighbors)
+    assert len(I) == len(contextualized_embs_np)
+    return list(map(lambda idx: faiss_idx_to_token[idx], I.flatten()))
 
 
 if __name__ == '__main__':
@@ -221,6 +226,7 @@ if __name__ == '__main__':
     parser.add_argument('-stk', '--search-top-k', type=int, default=1000, help='search tok k results (default 1000)')
     parser.add_argument('-sn', '--search-n-neighbors', type=int, default=3, help='search neighbors number (default 3)')
     parser.add_argument('--train-hnsw-only', action="store_true", help='train hnsw only (default False)')
+    parser.add_argument('-imi', '--in-memory-index', action="store_true", help='in-memory inverted index type (default False)')
     parser.add_argument('-c', '--use-cache', action="store_true", help='use cache (default False)')
     parser.add_argument('-p', '--base-path', type=str, default='./', help='base path (default ./)')
     args = parser.parse_args()
@@ -245,7 +251,7 @@ if __name__ == '__main__':
     hnsw_index.hnsw.efSearch = args.hnsw_ef_search
     inverted_index = build_inverted_index()
     # Retrieval
-    results = perform_searches(inverted_index)
+    results = inverted_index.search(queries, query_tokens_calculator, args.search_top_k)
     retriever = EvaluateRetrieval(score_function="dot")
     ndcg, _map, recall, precision = retriever.evaluate(qrels, results, retriever.k_values)
     mrr = retriever.evaluate_custom(qrels, results, retriever.k_values, metric="mrr")

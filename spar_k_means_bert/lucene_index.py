@@ -19,7 +19,7 @@ from util.path import delete_folder
 
 
 class LuceneIndex:
-    def __init__(self):
+    def __init__(self, base_path: str, use_cache: bool):
         jcc_path = '/home/slava/IdeaProjects/sparsifier-model/tools/jcc'
         if jcc_path not in sys.path:
             sys.path.append(jcc_path)
@@ -27,15 +27,17 @@ class LuceneIndex:
             lucene.initVM()
         except Exception as e:
             print(f'Init error: {e}')
-        self.index_path = "./runs/inverted_index"
+        self.index_path = f"{base_path}runs/inverted_index"
+        if not use_cache:
+            delete_folder(self.index_path)
         self.index_jpath = Paths.get(self.index_path)
         config = IndexWriterConfig(KeywordAnalyzer())
         self.writer = IndexWriter(FSDirectory.open(self.index_jpath), config)
 
-    def index(self, doc_id: int, token_and_cluster_id_list, scores):
+    def index(self, doc_id: int, tokens_and_scores: dict):
         doc = Document()
         doc.add(to_doc_id_field(doc_id))
-        for token_and_cluster_id, score in zip(token_and_cluster_id_list, scores):
+        for token_and_cluster_id, score in tokens_and_scores.items():
             score = score.item()
             doc.add(FloatDocValuesField(token_and_cluster_id, score))
         self.writer.addDocument(doc)
@@ -43,6 +45,15 @@ class LuceneIndex:
     def complete_indexing(self):
         self.writer.forceMerge(1, True)
         self.writer.commit()
+
+    def size(self):
+        try:
+            reader = DirectoryReader.open(FSDirectory.open(self.index_jpath))
+            num_docs = reader.numDocs()
+            reader.close()
+            return num_docs
+        except:
+            return 0
 
     def delete_index(self):
         delete_folder(self.index_path)
