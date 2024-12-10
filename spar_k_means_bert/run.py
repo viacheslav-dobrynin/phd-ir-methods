@@ -146,15 +146,11 @@ def build_inverted_index():
         contextualized_embs = contextualized_embs.squeeze(0)
         _, I = hnsw_index.search(contextualized_embs, args.index_n_neighbors)
         assert len(I) == len(contextualized_embs)
-        faiss_ids = I.flatten()
+        faiss_ids = np.unique(I.flatten()) # this help to remove token repetition
         token_and_cluster_id_list = [faiss_idx_to_token[id] for id in faiss_ids]
         centroids = torch.from_numpy(hnsw_index.reconstruct_batch(faiss_ids))
         scores = torch.max(contextualized_embs @ centroids.T, dim=0).values  # MaxSim
-        assert len(token_and_cluster_id_list) == len(scores)
-        deduplicated_tokens_and_scores = defaultdict(float)
-        for token, score in zip(token_and_cluster_id_list, scores.cpu().detach().numpy()):
-            deduplicated_tokens_and_scores[token] = score # this help to remove token repetition
-        inverted_index.index(doc_id, deduplicated_tokens_and_scores)
+        inverted_index.index(doc_id, token_and_cluster_id_list, scores)
     inverted_index.complete_indexing()
     return inverted_index
 

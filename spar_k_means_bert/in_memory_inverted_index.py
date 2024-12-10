@@ -1,7 +1,9 @@
 import os
-import tqdm
 import pickle
 from collections import defaultdict
+
+import torch
+import tqdm
 
 
 class InMemoryInvertedIndex:
@@ -15,8 +17,10 @@ class InMemoryInvertedIndex:
             else:
                 os.remove(self.index_file)
 
-    def index(self, doc_id: int, tokens_and_scores: dict):
-        for token_and_cluster_id, score in tokens_and_scores.items():
+    def index(self, doc_id: int, token_and_cluster_id_list: list, scores: torch.tensor):
+        assert len(token_and_cluster_id_list) == len(scores)
+        scores = scores.tolist()
+        for token_and_cluster_id, score in zip(token_and_cluster_id_list, scores):
             self.inverted_index[token_and_cluster_id].add((doc_id, score))
 
     def complete_indexing(self):
