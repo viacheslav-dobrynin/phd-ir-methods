@@ -21,7 +21,7 @@ class InMemoryInvertedIndex:
         assert len(token_and_cluster_id_list) == len(scores)
         scores = scores.tolist()
         for token_and_cluster_id, score in zip(token_and_cluster_id_list, scores):
-            self.inverted_index[token_and_cluster_id].add((doc_id, score))
+            self.inverted_index[token_and_cluster_id].add((doc_id, score))  # TODO: can be replaced to str repr
 
     def complete_indexing(self):
         with open(self.index_file, "wb") as f:

@@ -21,7 +21,7 @@ from util.path import delete_folder
 
 class LuceneIndex:
     def __init__(self, base_path: str, use_cache: bool):
-        jcc_path = '/home/slava/IdeaProjects/sparsifier-model/tools/jcc'
+        jcc_path = '/home/slava/IdeaProjects/sparsifier-model/tools/jcc'  # TODO: use var for this
         if jcc_path not in sys.path:
             sys.path.append(jcc_path)
         try:
