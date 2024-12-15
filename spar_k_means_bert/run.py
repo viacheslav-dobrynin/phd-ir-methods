@@ -14,6 +14,8 @@ from transformers import AutoTokenizer, AutoModel
 
 from dataset import load_dataset
 from params import DEVICE
+from spar_k_means_bert.lucene_index import LuceneIndex
+from spar_k_means_bert.in_memory_inverted_index import InMemoryInvertedIndex
 
 
 class CorpusDataset(Dataset):
@@ -71,34 +73,6 @@ def get_contextualized_embs(token, doc_id):
     return embs[idxs]
 
 
-class InvertedIndex:
-    def __init__(self):
-        self.index = defaultdict(set)
-
-    def add(self, token_and_cluster_id, doc_id_and_score):
-        self.index[token_and_cluster_id].add(doc_id_and_score)
-
-    def search(self, query, top_k, n_neighbors):
-        tokenized_query = tokenize(query)
-        contextualized_embs = encode_to_token_embs(
-            input_ids=tokenized_query["input_ids"],
-            attention_mask=tokenized_query["attention_mask"])
-        doc_id_and_score_list = []
-        contextualized_embs_np = contextualized_embs.squeeze(0).cpu().detach().numpy()
-        _, I = hnsw_index.search(contextualized_embs_np, n_neighbors)
-        assert len(I) == len(contextualized_embs_np)
-        for idx in range(len(I)):
-            token_and_cluster_id_list = [faiss_idx_to_token[id] for id in I[idx].tolist()]
-            for token_and_cluster_id in token_and_cluster_id_list:
-                for doc_id_and_score in self.index[token_and_cluster_id]:
-                    doc_id_and_score_list.append(doc_id_and_score)
-
-        doc_id_to_score = defaultdict(float)
-        for doc_id, score in doc_id_and_score_list:
-            doc_id_to_score[doc_id] += score
-        return sorted(doc_id_to_score.items(), key=lambda e: e[1], reverse=True)[:top_k]
-
-
 def build_token_to_doc_ids():
     token_to_doc_ids = defaultdict(set)
     skip_tokens = {0, 101, 102}
@@ -152,7 +126,7 @@ def build_hnsw_index():
         kmeans.fit(embs)
         for i, centroid in enumerate(kmeans.cluster_centers_):
             hnsw_index.add(np.array([centroid]))
-            faiss_idx_to_token[hnsw_index.ntotal - 1] = (token, i)
+            faiss_idx_to_token[hnsw_index.ntotal - 1] = f"{token}_{i}"
 
     faiss.write_index(hnsw_index, hnsw_file_name)
     with open(faiss_idx_to_token_file_name, "wb") as f:
@@ -162,47 +136,33 @@ def build_hnsw_index():
 
 
 def build_inverted_index():
-    inverted_index_file_name = f"{args.base_path}inverted_index.pickle"
-
-    if args.use_cache and os.path.isfile(inverted_index_file_name):
-        with open(inverted_index_file_name, "rb") as f:
-            return pickle.load(f)
-
-    if os.path.isfile(inverted_index_file_name):
-        os.remove(inverted_index_file_name)
-
-    inverted_index = InvertedIndex()
+    if args.in_memory_index:
+        inverted_index = InMemoryInvertedIndex(args.base_path, args.use_cache)
+    else:
+        inverted_index = LuceneIndex(args.base_path, args.use_cache)
+    if inverted_index.size():
+        return inverted_index
     for doc_id, contextualized_embs in tqdm.tqdm(iterable=doc_id_to_embs.items(), desc="build_inverted_index"):
         contextualized_embs = contextualized_embs.squeeze(0)
         _, I = hnsw_index.search(contextualized_embs, args.index_n_neighbors)
         assert len(I) == len(contextualized_embs)
-        for idx in range(len(I)):
-            token_and_cluster_id_list = [faiss_idx_to_token[id] for id in I[idx]]
-            centroids = torch.from_numpy(hnsw_index.reconstruct_batch(I[idx]))
-            scores = torch.max(contextualized_embs @ centroids.T, dim=0).values # MaxSim
-            assert len(token_and_cluster_id_list) == len(scores)
-            for token_and_cluster_id, score in zip(token_and_cluster_id_list, scores):
-                score = score.item()
-                inverted_index.add(token_and_cluster_id, (doc_id, score))
-
-    with open(inverted_index_file_name, "wb") as f:
-        pickle.dump(inverted_index, f)
-
+        faiss_ids = np.unique(I.flatten()) # this help to remove token repetition
+        token_and_cluster_id_list = [faiss_idx_to_token[id] for id in faiss_ids]
+        centroids = torch.from_numpy(hnsw_index.reconstruct_batch(faiss_ids))
+        scores = torch.max(contextualized_embs @ centroids.T, dim=0).values  # MaxSim
+        inverted_index.index(doc_id, token_and_cluster_id_list, scores)
+    inverted_index.complete_indexing()
     return inverted_index
 
-
-def perform_searches():
-    results = {}
-    query_ids = list(queries.keys())
-    for query_id in tqdm.tqdm(iterable=query_ids, desc="search"):
-        doc_id_and_score_list = inverted_index.search(query=queries[query_id],
-                                                      top_k=args.search_top_k,
-                                                      n_neighbors=args.search_n_neighbors)
-        query_result = {}
-        for doc_id, score in doc_id_and_score_list:
-            query_result[doc_id] = score
-        results[query_id] = query_result
-    return results
+def query_tokens_calculator(query):
+    tokenized_query = tokenize(query)
+    contextualized_embs = encode_to_token_embs(
+        input_ids=tokenized_query["input_ids"],
+        attention_mask=tokenized_query["attention_mask"])
+    contextualized_embs_np = contextualized_embs.squeeze(0).cpu().detach().numpy()
+    _, I = hnsw_index.search(contextualized_embs_np, args.search_n_neighbors)
+    assert len(I) == len(contextualized_embs_np)
+    return list(map(lambda idx: faiss_idx_to_token[idx], np.unique(I.flatten())))
 
 
 if __name__ == '__main__':
@@ -220,6 +180,7 @@ if __name__ == '__main__':
     parser.add_argument('-stk', '--search-top-k', type=int, default=1000, help='search tok k results (default 1000)')
     parser.add_argument('-sn', '--search-n-neighbors', type=int, default=3, help='search neighbors number (default 3)')
     parser.add_argument('--train-hnsw-only', action="store_true", help='train hnsw only (default False)')
+    parser.add_argument('-imi', '--in-memory-index', action="store_true", help='in-memory inverted index type (default False)')
     parser.add_argument('-c', '--use-cache', action="store_true", help='use cache (default False)')
     parser.add_argument('-p', '--base-path', type=str, default='./', help='base path (default ./)')
     args = parser.parse_args()
@@ -244,7 +205,7 @@ if __name__ == '__main__':
     hnsw_index.hnsw.efSearch = args.hnsw_ef_search
     inverted_index = build_inverted_index()
     # Retrieval
-    results = perform_searches()
+    results = inverted_index.search(queries, query_tokens_calculator, args.search_top_k)
     retriever = EvaluateRetrieval(score_function="dot")
     ndcg, _map, recall, precision = retriever.evaluate(qrels, results, retriever.k_values)
     mrr = retriever.evaluate_custom(qrels, results, retriever.k_values, metric="mrr")
