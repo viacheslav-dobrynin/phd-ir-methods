@@ -170,7 +170,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-mid', '--backbone-model-id', type=str, default='sentence-transformers/all-MiniLM-L6-v2', help='backbone model id (default sentence-transformers/all-MiniLM-L6-v2)')
     parser.add_argument('-d', '--dataset', type=str, default='scifact', help='BEIR dataset name (default scifact)')
-    parser.add_argument('-l', '--dataset-length', type=int, default=-1, help='Dataset length (default -1, all dataset)')
+    parser.add_argument('-l', '--dataset-length', type=int, default=None, help='Dataset length (default None, all dataset)')
     parser.add_argument('-b', '--batch-size', type=int, default=128, help='batch size (default 128)')
     parser.add_argument('-kmn', '--kmeans-n-clusters', type=int, default=8, help='kmeans clusters number (default 8)')
     parser.add_argument('-M', '--hnsw-M', type=int, default=32, help='the number of neighbors used in the graph. A larger M is more accurate but uses more memory (default 32)')
@@ -187,10 +187,9 @@ if __name__ == '__main__':
     print(f"Params: {args}")
     # Data, tokenizer, model
     tokenizer = AutoTokenizer.from_pretrained(args.backbone_model_id, use_fast=True)
-    corpus, queries, qrels = load_dataset(dataset=args.dataset)
+    corpus, queries, qrels = load_dataset(dataset=args.dataset, length=args.dataset_length)
     sep = " "
-    corpus = {doc_id: (doc["title"] + sep + doc["text"]).strip() for i, (doc_id, doc) in enumerate(corpus.items())
-              if args.dataset_length == -1 or i < args.dataset_length}
+    corpus = {doc_id: (doc["title"] + sep + doc["text"]).strip() for doc_id, doc in corpus.items()}
     print(f"Corpus size={len(corpus)}, queries size={len(queries)}, qrels size={len(qrels)}")
     dataset = CorpusDataset(corpus)
     dataloader = DataLoader(dataset=dataset, batch_size=args.batch_size)

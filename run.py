@@ -21,8 +21,7 @@ class InMemoryIndexRunner:
     def __init__(self, encode_fun, dataset=None, docs_number=None):
         self.encode = encode_fun
         self.index_path = "./runs/custom/inverted_index"
-        corpus, self.queries, self.qrels = load_dataset(dataset) if dataset else load_dataset()
-        corpus = dict(itertools.islice(corpus.items(), 0, docs_number)) if docs_number else corpus
+        corpus, self.queries, self.qrels = load_dataset(dataset=dataset, length=docs_number)
         self.corpus = {doc_id: (doc["title"] + " " + doc["text"]).strip() for doc_id, doc in corpus.items()}
         self.inverted_index = InMemoryInvertedIndex()
 
@@ -60,8 +59,7 @@ class LuceneRunner:
         self.analyzer = StandardAnalyzer()
         self.index_path = "./runs/inverted_index"
         self.index_jpath = Paths.get(self.index_path)
-        corpus, self.queries, self.qrels = load_dataset(dataset) if dataset else load_dataset()
-        corpus = dict(itertools.islice(corpus.items(), 0, docs_number)) if docs_number else corpus
+        corpus, self.queries, self.qrels = load_dataset(dataset=dataset, length=docs_number)
         self.corpus = {doc_id: (doc["title"] + " " + doc["text"]).strip() for doc_id, doc in corpus.items()}
 
     def index(self, batch_size=300):
