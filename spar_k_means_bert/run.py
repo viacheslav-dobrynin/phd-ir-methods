@@ -16,6 +16,7 @@ from dataset import load_dataset
 from params import DEVICE
 from spar_k_means_bert.lucene_index import LuceneIndex
 from spar_k_means_bert.in_memory_inverted_index import InMemoryInvertedIndex
+from util.model import build_encode_dense_fun
 
 
 class CorpusDataset(Dataset):
@@ -139,7 +140,7 @@ def build_inverted_index():
     if args.in_memory_index:
         inverted_index = InMemoryInvertedIndex(args.base_path, args.use_cache)
     else:
-        inverted_index = LuceneIndex(args.base_path, args.use_cache)
+        inverted_index = LuceneIndex(args.base_path, args.use_cache, threshold)
     if inverted_index.size():
         return inverted_index
     for doc_id, contextualized_embs in tqdm.tqdm(iterable=doc_id_to_embs.items(), desc="build_inverted_index"):
@@ -194,6 +195,10 @@ if __name__ == '__main__':
     dataset = CorpusDataset(corpus)
     dataloader = DataLoader(dataset=dataset, batch_size=args.batch_size)
     model = load_model()
+    encode_dense = build_encode_dense_fun(tokenizer=tokenizer, model=model)
+    threshold = 0.8 * encode_dense("She enjoys reading books in her free time.") @ encode_dense("In her leisure hours, she likes to read novels.").T
+    threshold = threshold.squeeze(0).cpu()
+    print(f"Dense similarity threshold: {threshold}")
     # Indexing
     doc_id_to_embs = build_doc_id_to_embs()
     hnsw_index, faiss_idx_to_token = build_hnsw_index()
