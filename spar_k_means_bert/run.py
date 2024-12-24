@@ -34,7 +34,7 @@ class CorpusDataset(Dataset):
     def __getitem__(self, item):
         return self.doc_ids[item], self.tokenized_docs['input_ids'][item], self.tokenized_docs['attention_mask'][item]
 
-    def get_by_doc_id(self, doc_id, device="cpu"):
+    def get_by_doc_id(self, doc_id, device=DEVICE):
         idx = self.doc_id_to_idx[doc_id]
         return (self.tokenized_docs['input_ids'][idx].to(device).unsqueeze(0),
                 self.tokenized_docs['attention_mask'][idx].to(device).unsqueeze(0))
@@ -90,7 +90,6 @@ def build_doc_id_to_embs():
     doc_id_to_embs = {}
     for doc_ids, token_ids_batch, attention_mask in tqdm.tqdm(iterable=dataloader, desc="encode_to_token_embs"):
         embs = encode_to_token_embs(input_ids=token_ids_batch, attention_mask=attention_mask)
-        embs = embs.cpu()
         for idx, doc_id in enumerate(doc_ids):
             doc_id_to_embs[doc_id] = embs[idx].unsqueeze(0)
     return doc_id_to_embs
@@ -197,7 +196,7 @@ if __name__ == '__main__':
     model = load_model()
     encode_dense = build_encode_dense_fun(tokenizer=tokenizer, model=model)
     threshold = 0.8 * encode_dense("She enjoys reading books in her free time.") @ encode_dense("In her leisure hours, she likes to read novels.").T
-    threshold = threshold.squeeze(0).cpu()
+    threshold = threshold.squeeze(0)
     print(f"Dense similarity threshold: {threshold}")
     # Indexing
     doc_id_to_embs = build_doc_id_to_embs()
