@@ -20,7 +20,7 @@ from util.path import delete_folder
 
 
 class LuceneIndex:
-    def __init__(self, base_path: str, use_cache: bool):
+    def __init__(self, base_path: str, use_cache: bool, threshold: torch.tensor = None):
         jcc_path = '/home/slava/IdeaProjects/sparsifier-model/tools/jcc'  # TODO: use var for this
         if jcc_path not in sys.path:
             sys.path.append(jcc_path)
@@ -34,14 +34,15 @@ class LuceneIndex:
         self.index_jpath = Paths.get(self.index_path)
         config = IndexWriterConfig(KeywordAnalyzer())
         self.writer = IndexWriter(FSDirectory.open(self.index_jpath), config)
+        self.threshold = threshold
 
     def index(self, doc_id: int, token_and_cluster_id_list: list, scores: torch.tensor):
         assert len(token_and_cluster_id_list) == len(scores)
         doc = Document()
         doc.add(to_doc_id_field(doc_id))
-        scores = scores.to(torch.float8_e4m3fn).view(dtype=torch.uint8).tolist()
         for token_and_cluster_id, score in zip(token_and_cluster_id_list, scores):
-            doc.add(NumericDocValuesField(token_and_cluster_id, score))
+            if not self.threshold or score >= self.threshold:
+                doc.add(NumericDocValuesField(token_and_cluster_id, score.to(torch.float8_e4m3fn).view(dtype=torch.uint8).item()))
         self.writer.addDocument(doc)
 
     def complete_indexing(self):
@@ -85,9 +86,3 @@ class LuceneIndex:
         for token_and_cluster_id in token_and_cluster_id_list:
             field_sources.append(FloatFieldSource(token_and_cluster_id))
         return FunctionQuery(SumFloatFunction(field_sources))
-
-
-if __name__ == '__main__':
-    index = LuceneIndex()
-    index.complete_indexing()
-    print(KeywordAnalyzer())
