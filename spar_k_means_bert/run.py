@@ -142,15 +142,17 @@ def build_inverted_index():
         inverted_index = LuceneIndex(args.base_path, args.use_cache, threshold)
     if inverted_index.size():
         return inverted_index
-    for doc_id, contextualized_embs in tqdm.tqdm(iterable=doc_id_to_embs.items(), desc="build_inverted_index"):
-        contextualized_embs = contextualized_embs.squeeze(0)
-        _, I = hnsw_index.search(contextualized_embs, args.index_n_neighbors)
-        assert len(I) == len(contextualized_embs)
-        faiss_ids = np.unique(I.flatten()) # this help to remove token repetition
-        token_and_cluster_id_list = [faiss_idx_to_token[id] for id in faiss_ids]
-        centroids = torch.from_numpy(hnsw_index.reconstruct_batch(faiss_ids))
-        scores = torch.max(contextualized_embs @ centroids.T, dim=0).values  # MaxSim
-        inverted_index.index(doc_id, token_and_cluster_id_list, scores)
+    for doc_ids, token_ids_batch, attention_mask in tqdm.tqdm(iterable=dataloader, desc="build_inverted_index"):
+        embs = encode_to_token_embs(input_ids=token_ids_batch, attention_mask=attention_mask)
+        for idx, doc_id in enumerate(doc_ids):
+            contextualized_embs = embs[idx].cpu()
+            _, I = hnsw_index.search(contextualized_embs, args.index_n_neighbors)
+            assert len(I) == len(contextualized_embs)
+            faiss_ids = np.unique(I.flatten()) # this help to remove token repetition
+            token_and_cluster_id_list = [faiss_idx_to_token[id] for id in faiss_ids]
+            centroids = torch.from_numpy(hnsw_index.reconstruct_batch(faiss_ids))
+            scores = torch.max(contextualized_embs @ centroids.T, dim=0).values  # MaxSim
+            inverted_index.index(doc_id, token_and_cluster_id_list, scores)
     inverted_index.complete_indexing()
     return inverted_index
 
@@ -199,7 +201,7 @@ if __name__ == '__main__':
     threshold = threshold.squeeze(0)
     print(f"Dense similarity threshold: {threshold}")
     # Indexing
-    doc_id_to_embs = build_doc_id_to_embs()
+    # doc_id_to_embs = build_doc_id_to_embs()
     hnsw_index, faiss_idx_to_token = build_hnsw_index()
     print("HNSW index size: ", hnsw_index.ntotal)
     if args.train_hnsw_only:
