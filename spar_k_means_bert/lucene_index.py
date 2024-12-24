@@ -21,7 +21,7 @@ from util.path import delete_folder
 
 class LuceneIndex:
     def __init__(self, base_path: str, use_cache: bool, threshold: torch.tensor = None):
-        jcc_path = '/home/slava/IdeaProjects/sparsifier-model/tools/jcc'  # TODO: use var for this
+        jcc_path = f'{base_path}tools/jcc'
         if jcc_path not in sys.path:
             sys.path.append(jcc_path)
         try:
