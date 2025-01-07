@@ -68,13 +68,13 @@ if __name__ == '__main__':
     del qrels
 
     # Index
-    token_to_faiss_ids = defaultdict(set)
+    doc_id_to_faiss_ids_range = {}
     with open("./datasets/msmarco/corpus.jsonl", "r") as f:
         for line in tqdm.tqdm(iterable=f, desc="indexing"):
             if not line.strip():
                 continue
             doc = json.loads(line)
-            doc = (doc["title"] + sep + doc["text"]).strip()
+            doc_id, doc = doc["_id"], (doc["title"] + sep + doc["text"]).strip()
             tokenized_doc = tokenizer(doc, padding=True, truncation=True, return_tensors='pt').to(DEVICE)
             token_ids, attention_mask = tokenized_doc['input_ids'], tokenized_doc['attention_mask']
             keep_mask = ~torch.isin(token_ids, stop_tokens)
@@ -86,13 +86,11 @@ if __name__ == '__main__':
             context_embs = model_output.last_hidden_state.cpu()
             start = index.ntotal
             index.add(context_embs.squeeze(dim=0))
-            token_ids = token_ids.squeeze(dim=0)
-            for i in range(len(token_ids)):
-                token_to_faiss_ids[token_ids[i].item()].add(start + i)
+            doc_id_to_faiss_ids_range[doc_id] = (start, index.ntotal)
 
     faiss.write_index(index, "./ms_marco_embs_pq.index")
-    with open("./token_to_faiss_ids.pickle", "wb") as f:
-        pickle.dump(token_to_faiss_ids, f)
+    with open("./doc_id_to_faiss_ids_range.pickle", "wb") as f:
+        pickle.dump(doc_id_to_faiss_ids_range, f)
 
 # TODO: filter stopwords
 # list(map(lambda id: tokenizer.convert_ids_to_tokens(id), sorted(list(map(lambda k: k, token_to_faiss_ids)), key=lambda k: len(token_to_faiss_ids[k]),reverse=True)))
