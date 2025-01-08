@@ -1,5 +1,6 @@
 from collections import defaultdict
 
+import argparse
 import numpy as np
 import faiss
 import torch
@@ -31,19 +32,37 @@ stop_tokens = {1012, 1996, 1010, 1997, 1037, 1998, 2000, 1999, 2003, 101, 102, 1
                2012, 1016, 2031, 1013, 2025, 2065, 1002, 1017, 2050, 1045, 2097, 2028, 2029, 2062, 2001, 2038, 2035,
                1025, 2021, 2089, 2036, 2043, 2027, 2060, 2087, 2055, 1018, 3022, 2039, 2045, 2084, 1019, 2037}
 stop_tokens = torch.tensor(list(stop_tokens), device=DEVICE)
+model_id = "sentence-transformers/all-MiniLM-L6-v2"
+sep = " "
+msmarco_path = "./datasets/msmarco/corpus.jsonl"
+doc_id_to_faiss_ids_range_file_path = "./doc_id_to_faiss_ids_range.pickle"
+tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=True)
 
-if __name__ == '__main__':
-    # Setup
-    tokenizer = AutoTokenizer.from_pretrained("sentence-transformers/all-MiniLM-L6-v2", use_fast=True)
-    corpus, queries, qrels = load_dataset(dataset="msmarco")
-    sep = " "
-    corpus = {doc_id: (doc["title"] + sep + doc["text"]).strip() for doc_id, doc in corpus.items()}
-    print(f"Corpus size={len(corpus)}, queries size={len(queries)}, qrels size={len(qrels)}")
-
-    model = AutoModel.from_pretrained("sentence-transformers/all-MiniLM-L6-v2").to(DEVICE)
+def get_model():
+    model = AutoModel.from_pretrained(model_id).to(DEVICE)
     model.eval()
     for p in model.parameters():
         p.requires_grad = False
+    return model
+
+def parse_id_and_doc(line: str):
+    doc = json.loads(line)
+    doc_id, doc = doc["_id"], (doc["title"] + sep + doc["text"]).strip()
+    return doc_id, doc
+
+def tokenize_and_filter_stop_tokens(doc: str):
+    tokenized_doc = tokenizer(doc, padding=True, truncation=True, return_tensors='pt').to(DEVICE)
+    token_ids, attention_mask = tokenized_doc['input_ids'], tokenized_doc['attention_mask']
+    keep_mask = ~torch.isin(token_ids, stop_tokens)
+    token_ids, attention_mask = token_ids[keep_mask], attention_mask[keep_mask]
+    return token_ids, attention_mask
+
+def builds_embs():
+    # Setup
+    model = get_model()
+    corpus, queries, qrels = load_dataset(dataset="msmarco")
+    corpus = {doc_id: (doc["title"] + sep + doc["text"]).strip() for doc_id, doc in corpus.items()}
+    print(f"Corpus size={len(corpus)}, queries size={len(queries)}, qrels size={len(qrels)}")
 
     # Train PQ
     for_train = []
@@ -69,16 +88,13 @@ if __name__ == '__main__':
 
     # Index
     doc_id_to_faiss_ids_range = {}
-    with open("./datasets/msmarco/corpus.jsonl", "r") as f:
+    with open(msmarco_path, "r") as f:
         for line in tqdm.tqdm(iterable=f, desc="indexing"):
             if not line.strip():
                 continue
-            doc = json.loads(line)
-            doc_id, doc = doc["_id"], (doc["title"] + sep + doc["text"]).strip()
-            tokenized_doc = tokenizer(doc, padding=True, truncation=True, return_tensors='pt').to(DEVICE)
-            token_ids, attention_mask = tokenized_doc['input_ids'], tokenized_doc['attention_mask']
-            keep_mask = ~torch.isin(token_ids, stop_tokens)
-            token_ids, attention_mask = token_ids[keep_mask].unsqueeze(dim=0), attention_mask[keep_mask].unsqueeze(dim=0)
+            doc_id, doc = parse_id_and_doc(line)
+            token_ids, attention_mask = tokenize_and_filter_stop_tokens(doc)
+            token_ids, attention_mask = token_ids.unsqueeze(dim=0), attention_mask.unsqueeze(dim=0)
             if token_ids.numel() == 0:
                 continue
             with torch.no_grad():
@@ -89,8 +105,42 @@ if __name__ == '__main__':
             doc_id_to_faiss_ids_range[doc_id] = (start, index.ntotal)
 
     faiss.write_index(index, "./ms_marco_embs_pq.index")
-    with open("./doc_id_to_faiss_ids_range.pickle", "wb") as f:
+    with open(doc_id_to_faiss_ids_range_file_path, "wb") as f:
         pickle.dump(doc_id_to_faiss_ids_range, f)
+
+def build_token_to_embs():
+    with open(doc_id_to_faiss_ids_range_file_path, 'rb') as f:
+        doc_id_to_faiss_ids_range = pickle.load(f)
+    token_to_faiss_ids = defaultdict(set)
+    with open(msmarco_path, "r") as f:
+        for line in tqdm.tqdm(iterable=f, desc="indexing"):
+            if not line.strip():
+                continue
+            doc_id, doc = parse_id_and_doc(line)
+            token_ids, _ = tokenize_and_filter_stop_tokens(doc)
+            if token_ids.numel() == 0:
+                continue
+            faiss_ids_range = doc_id_to_faiss_ids_range[doc_id]
+            faiss_ids = list(range(faiss_ids_range[0], faiss_ids_range[1]))
+            assert token_ids.numel() == len(faiss_ids)
+            for token, faiss_id in zip(token_ids, faiss_ids):
+                token_to_faiss_ids[token.item()].add(faiss_id)
+
+    with open("./token_to_faiss_ids.pickle", 'wb') as f:
+        pickle.dump(token_to_faiss_ids, f)
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-b', '--build', type=str, help='What do you want to build? (variants: embs, token2embs)')
+    args = parser.parse_args()
+    print(f"Params: {args}")
+    if args.build == "embs":
+        builds_embs()
+    elif args.build == "token2embs":
+        build_token_to_embs()
+    else:
+        print("Please choose --build arg")
+
 
 # TODO: filter stopwords
 # list(map(lambda id: tokenizer.convert_ids_to_tokens(id), sorted(list(map(lambda k: k, token_to_faiss_ids)), key=lambda k: len(token_to_faiss_ids[k]),reverse=True)))
