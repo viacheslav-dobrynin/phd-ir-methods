@@ -12,6 +12,7 @@ from params import DEVICE
 from util.iterable import chunked
 import pickle
 import json
+import lmdb
 
 # (1012, '.', 8327750), (1996, 'the', 6514526), (1010, ',', 5931143), (1997, 'of', 3529956), (1037, 'a', 3332838),
 # (1998, 'and', 3025636), (2000, 'to', 2786343), (1999, 'in', 2263387), (2003, 'is', 2125424), (101, '[CLS]', 2038782),
@@ -38,6 +39,7 @@ msmarco_path = "./datasets/msmarco/corpus.jsonl"
 doc_id_to_faiss_ids_range_file_path = "./doc_id_to_faiss_ids_range.pickle"
 tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=True)
 
+
 def get_model():
     model = AutoModel.from_pretrained(model_id).to(DEVICE)
     model.eval()
@@ -45,10 +47,12 @@ def get_model():
         p.requires_grad = False
     return model
 
+
 def parse_id_and_doc(line: str):
     doc = json.loads(line)
     doc_id, doc = doc["_id"], (doc["title"] + sep + doc["text"]).strip()
     return doc_id, doc
+
 
 def tokenize_and_filter_stop_tokens(doc: str):
     tokenized_doc = tokenizer(doc, padding=True, truncation=True, return_tensors='pt').to(DEVICE)
@@ -56,6 +60,7 @@ def tokenize_and_filter_stop_tokens(doc: str):
     keep_mask = ~torch.isin(token_ids, stop_tokens)
     token_ids, attention_mask = token_ids[keep_mask], attention_mask[keep_mask]
     return token_ids, attention_mask
+
 
 def builds_embs():
     # Setup
@@ -108,6 +113,7 @@ def builds_embs():
     with open(doc_id_to_faiss_ids_range_file_path, "wb") as f:
         pickle.dump(doc_id_to_faiss_ids_range, f)
 
+
 def build_token_to_embs():
     with open(doc_id_to_faiss_ids_range_file_path, 'rb') as f:
         doc_id_to_faiss_ids_range = pickle.load(f)
@@ -129,18 +135,33 @@ def build_token_to_embs():
     with open("./token_to_faiss_ids.pickle", 'wb') as f:
         pickle.dump(token_to_faiss_ids, f)
 
+
+def build_lmdb_for_token_to_embs():
+    with open("./token_to_faiss_ids.pickle", 'rb') as f:
+        token_to_faiss_ids = pickle.load(f)
+    db_path = "./token_to_faiss_ids.db"
+    env = lmdb.open(path=db_path, map_size=50 * 1024 ** 3)
+    with env.begin(write=True) as tx:
+        for token, faiss_ids in tqdm.tqdm(token_to_faiss_ids.items(), desc="saving"):
+            tx.put(str(token).encode("utf-8"), pickle.dumps(faiss_ids))
+        tx.commit()
+    env.close()
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-b', '--build', type=str, help='What do you want to build? (variants: embs, token2embs)')
+    parser.add_argument('-b', '--build', type=str,
+                        help='What do you want to build? (variants: embs, token2embs, lmdb_for_token2embs)')
     args = parser.parse_args()
     print(f"Params: {args}")
     if args.build == "embs":
         builds_embs()
     elif args.build == "token2embs":
         build_token_to_embs()
+    elif args.build == "lmdb_for_token2embs":
+        build_lmdb_for_token_to_embs()
     else:
         print("Please choose --build arg")
-
 
 # TODO: filter stopwords
 # list(map(lambda id: tokenizer.convert_ids_to_tokens(id), sorted(list(map(lambda k: k, token_to_faiss_ids)), key=lambda k: len(token_to_faiss_ids[k]),reverse=True)))
