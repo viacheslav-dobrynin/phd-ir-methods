@@ -11,3 +11,4 @@ dependencies:
   - nltk
   - pip:
       - beir
+      - lmdb

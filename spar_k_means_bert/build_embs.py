@@ -144,7 +144,7 @@ def build_lmdb_for_token_to_embs():
     with env.begin(write=True) as tx:
         for token, faiss_ids in tqdm.tqdm(token_to_faiss_ids.items(), desc="saving"):
             tx.put(str(token).encode("utf-8"), pickle.dumps(faiss_ids))
-        tx.commit()
+        print("Saving finished")
     env.close()
 
 
