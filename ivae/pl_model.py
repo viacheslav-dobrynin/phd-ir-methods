@@ -17,7 +17,7 @@ class SparserModel(L.LightningModule):
 
                  elbo_loss_alpha=ELBO_LOSS_ALPHA,
                  distance_loss_alpha=DIST_LOSS_ALPHA,
-                 regularization_loss=FLOPS(alpha=REG_LOSS_ALPHA),
+                 regularization_loss_alpha=REG_LOSS_ALPHA,
 
                  prior=None, decoder=None, encoder=None,
 
@@ -74,7 +74,7 @@ class SparserModel(L.LightningModule):
                         device=device)
         # losses
         self.elbo_loss_alpha = elbo_loss_alpha
-        self.regularization_loss = regularization_loss
+        self.regularization_loss = FLOPS(alpha=regularization_loss_alpha)
         self.distance_loss = DistanceLoss(alpha=distance_loss_alpha)
 
         self.logl.apply(weights_init)
