@@ -9,7 +9,6 @@ from transformers import AutoTokenizer, AutoModel
 
 from dataset import get_dataloader
 from ivae.pl_model import SparserModel
-from loss import FLOPS
 from params import (K_MEANS_LIB, NUM_CLUSTERS, KMEANS_FILE, EMBS_FILE, BACKBONE_MODEL_ID, DEVICE, SEED,
                     REG_LOSS_ALPHA, LATENT_SIZE, HIDDEN_DIM, ELBO_LOSS_ALPHA, DIST_LOSS_ALPHA, ANNEAL, PROJECT, EPOCHS,
                     DEVICES, LEARNING_RATE)
@@ -115,7 +114,7 @@ def train(slope=.1, detect_anomaly=False, model_desc=""):
 
                          elbo_loss_alpha=ELBO_LOSS_ALPHA,
                          distance_loss_alpha=DIST_LOSS_ALPHA,
-                         regularization_loss=FLOPS(alpha=REG_LOSS_ALPHA),
+                         regularization_loss_alpha=REG_LOSS_ALPHA,
 
                          activation='lrelu', slope=slope,
                          device=DEVICE,
