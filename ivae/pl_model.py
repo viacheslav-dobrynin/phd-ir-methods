@@ -39,7 +39,7 @@ class SparserModel(L.LightningModule):
             lora_alpha=16,
             bias="none",
             task_type=TaskType.FEATURE_EXTRACTION,
-            target_modules=["key", "query", "value"],
+            target_modules=["q_lin", "k_lin", "v_lin"],
         )
         self.backbone = get_peft_model(backbone, lora_config)
 
