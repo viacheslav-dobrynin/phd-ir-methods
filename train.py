@@ -101,7 +101,7 @@ def get_trainer(logger, detect_anomaly):
         return L.Trainer(max_epochs=EPOCHS, logger=logger, detect_anomaly=detect_anomaly)
 
 
-def train(slope=.1, detect_anomaly=False, model_desc=""):
+def train(slope=.1, decoder_var_coef=.000000001, detect_anomaly=False, model_desc=""):
     torch.manual_seed(SEED)
     np.random.seed(SEED)
 
@@ -115,6 +115,8 @@ def train(slope=.1, detect_anomaly=False, model_desc=""):
                          elbo_loss_alpha=ELBO_LOSS_ALPHA,
                          distance_loss_alpha=DIST_LOSS_ALPHA,
                          regularization_loss_alpha=REG_LOSS_ALPHA,
+
+                         decoder_var_coef=decoder_var_coef,
 
                          activation='lrelu', slope=slope,
                          device=DEVICE,
