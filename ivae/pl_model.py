@@ -21,6 +21,8 @@ class SparserModel(L.LightningModule):
 
                  prior=None, decoder=None, encoder=None,
 
+                 decoder_var_coef=.01,
+
                  n_layers=3, activation='lrelu', slope=.1, # TODO: try slope=0.01
 
                  device='cpu', learning_rate=LEARNING_RATE, anneal=False):
@@ -66,7 +68,7 @@ class SparserModel(L.LightningModule):
         self.logl = MLP(self.aux_dim, latent_dim, hidden_dim, n_layers, activation=activation, slope=slope, device=device)
         # decoder params
         self.f = MLP(latent_dim, self.data_dim, hidden_dim, n_layers, activation=activation, slope=slope, device=device)
-        self.decoder_var = .01 * torch.ones(1).to(device)
+        self.decoder_var = decoder_var_coef * torch.ones(1).to(device)
         # encoder params
         self.g = MLP(self.data_dim + self.aux_dim, latent_dim, hidden_dim, n_layers, activation=activation, slope=slope,
                      device=device)
