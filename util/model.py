@@ -15,6 +15,7 @@ def create_model_name(model, desc=""):
 
 
 def build_encode_sparse_fun(tokenizer, model, threshold, zeroing_type="quantile"):
+    model.eval()
     def encode_sparse_from_tokens(token_ids, token_mask):
         with torch.no_grad():
             z = model.encode(token_ids=token_ids, token_mask=token_mask)
@@ -40,6 +41,7 @@ def build_encode_sparse_fun(tokenizer, model, threshold, zeroing_type="quantile"
 
 
 def build_encode_dense_fun(tokenizer, model):
+    model.eval()
     def encode_dense(docs):
         # Tokenize sentences
         encoded_input = tokenizer(docs, padding=True, truncation=True, return_tensors='pt').to(DEVICE)

@@ -3,6 +3,7 @@ import pytorch_lightning as L
 import torch
 import wandb
 from transformers import AutoModel
+from peft import LoraConfig, TaskType, get_peft_model
 
 from ivae.model import Normal, MLP, weights_init
 from loss import DistanceLoss, FLOPS
@@ -33,7 +34,14 @@ class SparserModel(L.LightningModule):
         backbone.eval()
         for p in backbone.parameters():
             p.requires_grad = False
-        self.backbone = backbone
+        lora_config = LoraConfig(
+            r=8,
+            lora_alpha=16,
+            bias="none",
+            task_type=TaskType.FEATURE_EXTRACTION,
+            target_modules=["key", "query", "value"],
+        )
+        self.backbone = get_peft_model(backbone, lora_config)
 
         self.data_dim = self.backbone.config.hidden_size
         self.latent_dim = latent_dim
