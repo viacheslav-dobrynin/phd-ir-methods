@@ -31,6 +31,9 @@ class SparserModel(L.LightningModule):
         super().__init__()
         self.save_hyperparameters()
         backbone = AutoModel.from_pretrained(BACKBONE_MODEL_ID).to(device)
+        backbone.eval()
+        for p in backbone.parameters():
+            p.requires_grad = False
         lora_config = LoraConfig(
             r=8,
             lora_alpha=16,
@@ -39,7 +42,6 @@ class SparserModel(L.LightningModule):
             target_modules=["q_lin", "k_lin", "v_lin"],
         )
         self.backbone = get_peft_model(backbone, lora_config)
-        self.backbone.print_trainable_parameters()
 
         self.data_dim = self.backbone.config.hidden_size
         self.latent_dim = latent_dim
