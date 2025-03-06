@@ -90,9 +90,8 @@ class SparserModel(L.LightningModule):
 
     def encode(self, token_ids, token_mask):
         x, u = self.__encode_to_x_and_u(token_ids=token_ids, token_mask=token_mask)
-        (g, v) = self.encoder_params(x, u)
-        z = g
-        # z = self.encoder_dist.sample(*encoder_params)
+        encoder_params = self.encoder_params(x, u)
+        z = self.encoder_dist.sample(*encoder_params)
         return z
 
     def encoder_params(self, x, u):
