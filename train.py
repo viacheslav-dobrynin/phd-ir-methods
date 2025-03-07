@@ -12,7 +12,7 @@ from dataset import get_dataloader
 from ivae.pl_model import SparserModel
 from params import (K_MEANS_LIB, NUM_CLUSTERS, KMEANS_FILE, EMBS_FILE, BACKBONE_MODEL_ID, DEVICE, SEED,
                     LATENT_SIZE, HIDDEN_DIM, ANNEAL, PROJECT, EPOCHS,
-                    DEVICES, LEARNING_RATE)
+                    DEVICES, LEARNING_RATE, DATASET)
 from pooling import mean_pooling
 from util.model import create_model_name
 
@@ -110,13 +110,14 @@ def train(elbo_loss_alpha,
           decoder_var_coef=.000000001,
           slope=.1,
           eval_fun: EvalFunctionType = None,
+          dataset_name=DATASET,
           detect_anomaly=False,
           model_desc=""):
     torch.manual_seed(SEED)
     np.random.seed(SEED)
 
     tokenizer = AutoTokenizer.from_pretrained(BACKBONE_MODEL_ID, use_fast=True)
-    dataloader, dataset_n, max_iter = get_dataloader(tokenizer)
+    dataloader, dataset_n, max_iter = get_dataloader(tokenizer=tokenizer, dataset_name=dataset_name)
     kmeans = get_kmeans(dataloader)
 
     model = SparserModel(latent_dim=LATENT_SIZE, embs_kmeans=kmeans, dataset_n=dataset_n, max_iter=max_iter,
@@ -140,5 +141,5 @@ def train(elbo_loss_alpha,
     trainer.fit(model=model, train_dataloaders=dataloader)
     if eval_fun:
         columns, data = eval_fun(model)
-        wandb_logger.log_text(key="eval metrics", columns=columns, data=data)
+        wandb_logger.log_text(key="eval_metrics", columns=columns, data=data)
     wandb.finish()
