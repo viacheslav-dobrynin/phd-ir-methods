@@ -1,5 +1,6 @@
 import os
 import pickle
+from typing import Callable, Optional, List, Tuple
 
 import numpy as np
 import pytorch_lightning as L
@@ -10,7 +11,7 @@ from transformers import AutoTokenizer, AutoModel
 from dataset import get_dataloader
 from ivae.pl_model import SparserModel
 from params import (K_MEANS_LIB, NUM_CLUSTERS, KMEANS_FILE, EMBS_FILE, BACKBONE_MODEL_ID, DEVICE, SEED,
-                    REG_LOSS_ALPHA, LATENT_SIZE, HIDDEN_DIM, ELBO_LOSS_ALPHA, DIST_LOSS_ALPHA, ANNEAL, PROJECT, EPOCHS,
+                    LATENT_SIZE, HIDDEN_DIM, ANNEAL, PROJECT, EPOCHS,
                     DEVICES, LEARNING_RATE)
 from pooling import mean_pooling
 from util.model import create_model_name
@@ -100,8 +101,17 @@ def get_trainer(logger, detect_anomaly):
     else:
         return L.Trainer(max_epochs=EPOCHS, logger=logger, detect_anomaly=detect_anomaly)
 
+EvalFunctionType = Optional[Callable[[SparserModel], Tuple[List[str], List[List[str]]]]]
 
-def train(slope=.1, decoder_var_coef=.000000001, detect_anomaly=False, model_desc=""):
+
+def train(elbo_loss_alpha,
+          distance_loss_alpha,
+          regularization_loss_alpha,
+          decoder_var_coef=.000000001,
+          slope=.1,
+          eval_fun: EvalFunctionType = None,
+          detect_anomaly=False,
+          model_desc=""):
     torch.manual_seed(SEED)
     np.random.seed(SEED)
 
@@ -112,9 +122,9 @@ def train(slope=.1, decoder_var_coef=.000000001, detect_anomaly=False, model_des
     model = SparserModel(latent_dim=LATENT_SIZE, embs_kmeans=kmeans, dataset_n=dataset_n, max_iter=max_iter,
                          hidden_dim=HIDDEN_DIM,
 
-                         elbo_loss_alpha=ELBO_LOSS_ALPHA,
-                         distance_loss_alpha=DIST_LOSS_ALPHA,
-                         regularization_loss_alpha=REG_LOSS_ALPHA,
+                         elbo_loss_alpha=elbo_loss_alpha,
+                         distance_loss_alpha=distance_loss_alpha,
+                         regularization_loss_alpha=regularization_loss_alpha,
 
                          decoder_var_coef=decoder_var_coef,
 
@@ -128,4 +138,7 @@ def train(slope=.1, decoder_var_coef=.000000001, detect_anomaly=False, model_des
     wandb_logger = L.loggers.WandbLogger(project=PROJECT, log_model=True, name=model_name, id=model_name)
     trainer = get_trainer(logger=wandb_logger, detect_anomaly=detect_anomaly)
     trainer.fit(model=model, train_dataloaders=dataloader)
+    if eval_fun:
+        columns, data = eval_fun(model)
+        wandb_logger.log_text(key="eval metrics", columns=columns, data=data)
     wandb.finish()
