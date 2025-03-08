@@ -154,7 +154,7 @@ class SparserModel(L.LightningModule):
         x, u = self.__encode_to_x_and_u(token_ids=token_ids, token_mask=token_mask)
 
         elbo, z = self.elbo(x, u)
-        elbo_loss = self.elbo_loss_alpha * elbo
+        elbo_loss = self.elbo_loss_alpha * elbo.mul(-1)
         reg_loss = self.regularization_loss(z)
         dist_loss = self.distance_loss(x, z)
         z_nonzero = torch.sum(torch.abs(z) >= 1e-3).float() / len(z)
