@@ -18,6 +18,16 @@ from util.model import create_model_name
 
 
 def fit_kmeans(embs):
+    if K_MEANS_LIB == "faiss":
+        import faiss
+        kmeans = faiss.Kmeans(
+            d=embs.shape[-1],
+            k=NUM_CLUSTERS,
+            niter=4,
+            gpu=torch.cuda.is_available(),
+            verbose=True,
+            seed=123)
+        kmeans.train(embs)
     if K_MEANS_LIB == "fast_pytorch_kmeans":
         import fast_pytorch_kmeans
         kmeans = fast_pytorch_kmeans.KMeans(

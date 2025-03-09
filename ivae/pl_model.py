@@ -1,3 +1,4 @@
+import faiss
 import numpy as np
 import pytorch_lightning as L
 import torch
@@ -203,6 +204,9 @@ class SparserModel(L.LightningModule):
     def __encode_to_x_and_u(self, token_ids, token_mask):
         x = self.backbone(input_ids=token_ids, attention_mask=token_mask)
         x = mean_pooling(model_output=x, attention_mask=token_mask) # TODO: try pool sparse embeddings
-        labels = self.embs_kmeans.predict(x)
+        if isinstance(self.embs_kmeans, faiss.Kmeans):
+            _, labels = self.embs_kmeans.index.search(x, 1)
+        else:
+            labels = self.embs_kmeans.predict(x)
         u = torch.nn.functional.one_hot(labels, num_classes=self.aux_dim).float()
         return x, u
