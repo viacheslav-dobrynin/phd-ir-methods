@@ -148,11 +148,13 @@ def train(elbo_loss_alpha,
                          anneal=ANNEAL)
 
     model_name = create_model_name(model=model, desc=model_desc)
-    wandb.init(project=PROJECT, name=model_name)  # mode="disabled"
-    wandb_logger = L.loggers.WandbLogger(project=PROJECT, log_model=True, name=model_name, id=model_name)
-    trainer = get_trainer(logger=wandb_logger, detect_anomaly=detect_anomaly)
-    trainer.fit(model=model, train_dataloaders=dataloader)
-    if eval_fun:
-        columns, data = eval_fun(model)
-        wandb_logger.log_text(key="eval_metrics", columns=columns, data=data)
-    wandb.finish()
+    try:
+        wandb.init(project=PROJECT, name=model_name)  # mode="disabled"
+        wandb_logger = L.loggers.WandbLogger(project=PROJECT, log_model=True, name=model_name, id=model_name)
+        trainer = get_trainer(logger=wandb_logger, detect_anomaly=detect_anomaly)
+        trainer.fit(model=model, train_dataloaders=dataloader)
+        if eval_fun:
+            columns, data = eval_fun(model)
+            wandb_logger.log_text(key="eval_metrics", columns=columns, data=data)
+    finally:
+        wandb.finish()
