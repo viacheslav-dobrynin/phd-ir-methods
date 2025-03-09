@@ -27,7 +27,7 @@ def fit_kmeans(embs):
             gpu=torch.cuda.is_available(),
             verbose=True,
             seed=123)
-        kmeans.train(embs)
+        kmeans.train(embs.cpu().detach().numpy())
     if K_MEANS_LIB == "fast_pytorch_kmeans":
         import fast_pytorch_kmeans
         kmeans = fast_pytorch_kmeans.KMeans(
