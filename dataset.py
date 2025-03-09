@@ -7,7 +7,7 @@ from beir.datasets.data_loader import GenericDataLoader
 from nltk.corpus import reuters
 from torch.utils.data import Dataset, DataLoader
 
-from params import MAX_LENGTH, BATCH_SIZE, EPOCHS
+from params import MAX_LENGTH, EPOCHS
 
 nltk.download('stopwords')
 nltk.download('reuters')
@@ -86,11 +86,11 @@ def get_corpus(dataset_name: str):
     return corpus
 
 
-def get_dataloader(tokenizer, dataset_name: str):
+def get_dataloader(tokenizer, dataset_name: str, batch_size: int):
     corpus = get_corpus(dataset_name)
     # Create dataset and dataloader
     dataset = DocDataset(corpus, tokenizer)
-    dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
     del corpus
     # anneal params
     dataset_n = len(dataset)

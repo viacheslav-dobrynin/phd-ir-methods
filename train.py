@@ -12,7 +12,7 @@ from dataset import get_dataloader
 from ivae.pl_model import SparserModel
 from params import (K_MEANS_LIB, NUM_CLUSTERS, KMEANS_FILE, EMBS_FILE, BACKBONE_MODEL_ID, DEVICE, SEED,
                     LATENT_SIZE, HIDDEN_DIM, ANNEAL, PROJECT, EPOCHS,
-                    DEVICES, LEARNING_RATE, DATASET)
+                    DEVICES, LEARNING_RATE, DATASET, BATCH_SIZE)
 from pooling import mean_pooling
 from util.model import create_model_name
 
@@ -107,17 +107,20 @@ EvalFunctionType = Optional[Callable[[SparserModel], Tuple[List[str], List[List[
 def train(elbo_loss_alpha,
           distance_loss_alpha,
           regularization_loss_alpha,
-          decoder_var_coef=.000000001,
+          decoder_var_coef=.01,
           slope=.1,
           eval_fun: EvalFunctionType = None,
           dataset_name=DATASET,
+          batch_size=BATCH_SIZE,
           detect_anomaly=False,
           model_desc=""):
     torch.manual_seed(SEED)
     np.random.seed(SEED)
 
     tokenizer = AutoTokenizer.from_pretrained(BACKBONE_MODEL_ID, use_fast=True)
-    dataloader, dataset_n, max_iter = get_dataloader(tokenizer=tokenizer, dataset_name=dataset_name)
+    dataloader, dataset_n, max_iter = get_dataloader(tokenizer=tokenizer,
+                                                     dataset_name=dataset_name,
+                                                     batch_size=batch_size)
     kmeans = get_kmeans(dataloader)
 
     model = SparserModel(latent_dim=LATENT_SIZE, embs_kmeans=kmeans, dataset_n=dataset_n, max_iter=max_iter,
