@@ -206,6 +206,6 @@ class SparserModel(L.LightningModule):
         x = self.backbone(input_ids=token_ids, attention_mask=token_mask)
         x = mean_pooling(model_output=x, attention_mask=token_mask) # TODO: try pool sparse embeddings
         _, labels = self.embs_kmeans.search(x.cpu().detach().numpy(), 1)
-        labels = torch.from_numpy(labels).squeeze().to(self.device)
+        labels = torch.from_numpy(labels).squeeze(dim=-1).to(self.device)
         u = torch.nn.functional.one_hot(labels, num_classes=self.aux_dim).float()
         return x, u
