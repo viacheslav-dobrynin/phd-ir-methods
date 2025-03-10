@@ -8,7 +8,7 @@ DATASET = "msmarco_100000"
 LATENT_SIZE = 3000
 HIDDEN_DIM = 1500
 BACKBONE_MODEL_ID = "sentence-transformers/msmarco-distilbert-dot-v5"
-K_MEANS_LIB = "fast_pytorch_kmeans"
+K_MEANS_LIB = "faiss"
 
 # TRAINING PARAMS
 SEED = 1

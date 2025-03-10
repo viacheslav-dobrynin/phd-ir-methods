@@ -9,7 +9,7 @@ def create_model_name(model, desc=""):
             "_elbo_" + str(model.elbo_loss_alpha) +
             f"_{model.regularization_loss.__class__.__name__}_{str(model.regularization_loss.alpha)}" +
             "_dist_" + str(model.distance_loss.alpha) +
-            "_n_clusts_" + str(model.embs_kmeans.n_clusters) +
+            "_n_clusts_" + str(model.embs_kmeans.ntotal) +
             "_slope_" + str(model.slope) +
             desc)
 

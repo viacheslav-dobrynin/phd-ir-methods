@@ -38,14 +38,15 @@ class SparserModel(L.LightningModule):
 
         self.data_dim = self.backbone.config.hidden_size
         self.latent_dim = latent_dim
-        self.aux_dim = embs_kmeans.n_clusters
+        self.aux_dim = len(embs_kmeans)
         self.hidden_dim = hidden_dim
         self.n_layers = n_layers
         self.activation = activation
         self.slope = slope
         self.learning_rate = learning_rate
         self.anneal_params = anneal
-        self.embs_kmeans = embs_kmeans
+        self.embs_kmeans = faiss.IndexFlatL2(embs_kmeans.shape[1])
+        self.embs_kmeans.add(embs_kmeans)
         self.dataset_n = dataset_n
         self.max_iter = max_iter
 
@@ -204,9 +205,7 @@ class SparserModel(L.LightningModule):
     def __encode_to_x_and_u(self, token_ids, token_mask):
         x = self.backbone(input_ids=token_ids, attention_mask=token_mask)
         x = mean_pooling(model_output=x, attention_mask=token_mask) # TODO: try pool sparse embeddings
-        if isinstance(self.embs_kmeans, faiss.Kmeans):
-            _, labels = self.embs_kmeans.index.search(x, 1)
-        else:
-            labels = self.embs_kmeans.predict(x)
+        _, labels = self.embs_kmeans.search(x, 1)
+        labels = torch.from_numpy(labels).squeeze()
         u = torch.nn.functional.one_hot(labels, num_classes=self.aux_dim).float()
         return x, u

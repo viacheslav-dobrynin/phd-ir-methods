@@ -28,6 +28,7 @@ def fit_kmeans(embs):
             verbose=True,
             seed=123)
         kmeans.train(embs.cpu().detach().numpy())
+        return kmeans.centroids
     elif K_MEANS_LIB == "fast_pytorch_kmeans":
         import fast_pytorch_kmeans
         kmeans = fast_pytorch_kmeans.KMeans(
