@@ -30,7 +30,6 @@ class SparserModel(L.LightningModule):
 
         super().__init__()
         self.save_hyperparameters()
-        self.device = device
         backbone = AutoModel.from_pretrained(BACKBONE_MODEL_ID).to(device)
         backbone.eval()
         for p in backbone.parameters():
