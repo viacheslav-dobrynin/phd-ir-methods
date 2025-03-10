@@ -1,0 +1,17 @@
+name: sparsifier-model
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - faiss-gpu
+  - pytorch
+  - pytorch-lightning
+  - transformers
+  - numpy
+  - nltk
+  - pip:
+      - wandb
+      - beir
