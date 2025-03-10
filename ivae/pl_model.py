@@ -199,7 +199,7 @@ class SparserModel(L.LightningModule):
         self.training_step_outputs.clear()
 
     def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(self.parameters(), lr=self.learning_rate)
+        optimizer = torch.optim.AdamW(self.parameters(), lr=self.learning_rate, weight_decay=0.01)
         return optimizer
 
     def __encode_to_x_and_u(self, token_ids, token_mask):
