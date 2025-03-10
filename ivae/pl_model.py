@@ -14,7 +14,7 @@ from pooling import mean_pooling
 
 
 class SparserModel(L.LightningModule):
-    def __init__(self, latent_dim, embs_kmeans, dataset_n, max_iter, hidden_dim=1000,
+    def __init__(self, latent_dim, embs_kmeans_centroids, dataset_n, max_iter, hidden_dim=1000,
 
                  elbo_loss_alpha=ELBO_LOSS_ALPHA,
                  distance_loss_alpha=DIST_LOSS_ALPHA,
@@ -24,7 +24,7 @@ class SparserModel(L.LightningModule):
 
                  decoder_var_coef=.01,
 
-                 n_layers=3, activation='lrelu', slope=.1, # TODO: try slope=0.01
+                 n_layers=3, activation='lrelu', slope=.1,  # TODO: try slope=0.01
 
                  device='cpu', learning_rate=LEARNING_RATE, anneal=False):
 
@@ -38,15 +38,15 @@ class SparserModel(L.LightningModule):
 
         self.data_dim = self.backbone.config.hidden_size
         self.latent_dim = latent_dim
-        self.aux_dim = len(embs_kmeans)
+        self.aux_dim = len(embs_kmeans_centroids)
         self.hidden_dim = hidden_dim
         self.n_layers = n_layers
         self.activation = activation
         self.slope = slope
         self.learning_rate = learning_rate
         self.anneal_params = anneal
-        self.embs_kmeans = faiss.IndexFlatL2(embs_kmeans.shape[1])
-        self.embs_kmeans.add(embs_kmeans)
+        self.embs_kmeans_index = faiss.IndexFlatL2(embs_kmeans_centroids.shape[1])
+        self.embs_kmeans_index.add(embs_kmeans_centroids)
         self.dataset_n = dataset_n
         self.max_iter = max_iter
 
@@ -205,7 +205,7 @@ class SparserModel(L.LightningModule):
     def __encode_to_x_and_u(self, token_ids, token_mask):
         x = self.backbone(input_ids=token_ids, attention_mask=token_mask)
         x = mean_pooling(model_output=x, attention_mask=token_mask) # TODO: try pool sparse embeddings
-        _, labels = self.embs_kmeans.search(x.cpu().detach().numpy(), 1)
+        _, labels = self.embs_kmeans_index.search(x.cpu().detach().numpy(), 1)
         labels = torch.from_numpy(labels).squeeze(dim=-1).to(self.device)
         u = torch.nn.functional.one_hot(labels, num_classes=self.aux_dim).float()
         return x, u

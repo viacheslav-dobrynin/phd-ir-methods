@@ -134,7 +134,7 @@ def train(elbo_loss_alpha,
                                                      batch_size=batch_size)
     kmeans = get_kmeans(dataloader)
 
-    model = SparserModel(latent_dim=LATENT_SIZE, embs_kmeans=kmeans, dataset_n=dataset_n, max_iter=max_iter,
+    model = SparserModel(latent_dim=LATENT_SIZE, embs_kmeans_centroids=kmeans, dataset_n=dataset_n, max_iter=max_iter,
                          hidden_dim=HIDDEN_DIM,
 
                          elbo_loss_alpha=elbo_loss_alpha,
