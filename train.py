@@ -124,7 +124,8 @@ def train(elbo_loss_alpha,
           dataset_name=DATASET,
           batch_size=BATCH_SIZE,
           detect_anomaly=False,
-          model_desc=""):
+          model_desc="",
+          use_residual=True):
     torch.manual_seed(SEED)
     np.random.seed(SEED)
 
@@ -144,6 +145,7 @@ def train(elbo_loss_alpha,
                          decoder_var_coef=decoder_var_coef,
 
                          activation='lrelu', slope=slope,
+                         use_residual=use_residual,
                          device=DEVICE,
                          learning_rate=LEARNING_RATE,
                          anneal=ANNEAL)

@@ -25,6 +25,8 @@ class SparserModel(L.LightningModule):
                  decoder_var_coef=.01,
 
                  n_layers=3, activation='lrelu', slope=.1,  # TODO: try slope=0.01
+                 
+                 use_residual=True,
 
                  device='cpu', learning_rate=LEARNING_RATE, anneal=False):
 
@@ -45,6 +47,7 @@ class SparserModel(L.LightningModule):
         self.slope = slope
         self.learning_rate = learning_rate
         self.anneal_params = anneal
+        self.use_residual = use_residual
         self.embs_kmeans_index = faiss.IndexFlatL2(embs_kmeans_centroids.shape[1])
         self.embs_kmeans_index.add(embs_kmeans_centroids)
         self.dataset_n = dataset_n
@@ -67,15 +70,17 @@ class SparserModel(L.LightningModule):
 
         # prior_params
         self.prior_mean = torch.zeros(1).to(device)
-        self.logl = MLP(self.aux_dim, latent_dim, hidden_dim, n_layers, activation=activation, slope=slope, device=device)
+        self.logl = MLP(self.aux_dim, latent_dim, hidden_dim, n_layers, activation=activation, slope=slope, 
+                       device=device, use_residual=use_residual)
         # decoder params
-        self.f = MLP(latent_dim, self.data_dim, hidden_dim, n_layers, activation=activation, slope=slope, device=device)
+        self.f = MLP(latent_dim, self.data_dim, hidden_dim, n_layers, activation=activation, slope=slope, 
+                    device=device, use_residual=use_residual)
         self.decoder_var = decoder_var_coef * torch.ones(1).to(device)
         # encoder params
         self.g = MLP(self.data_dim + self.aux_dim, latent_dim, hidden_dim, n_layers, activation=activation, slope=slope,
-                     device=device)
+                     device=device, use_residual=use_residual)
         self.logv = MLP(self.data_dim + self.aux_dim, latent_dim, hidden_dim, n_layers, activation=activation, slope=slope,
-                        device=device)
+                        device=device, use_residual=use_residual)
         # losses
         self.elbo_loss_alpha = elbo_loss_alpha
         self.regularization_loss = FLOPS(alpha=regularization_loss_alpha)
