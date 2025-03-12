@@ -5,7 +5,7 @@ import torch
 import wandb
 from transformers import AutoModel
 
-from ivae.model import Normal, MLP, weights_init
+from ivae.modules import Normal, MLP, weights_init
 from loss import DistanceLoss, FLOPS
 from params import (BACKBONE_MODEL_ID, LEARNING_RATE, ELBO_LOSS_ALPHA,
                     DIST_LOSS_ALPHA, REG_LOSS_ALPHA,
