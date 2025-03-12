@@ -14,14 +14,18 @@ class DistanceLoss:
     def __init__(self, alpha):
         self.alpha = alpha
 
-    def __call__(self, x, x_rep):
+    def __call__(self, x, x_rep, return_raw=False):
         x_dots = self.__dot_products(x)
         x_relative_dots = x_dots / torch.diagonal(x_dots).unsqueeze(0).T
 
         x_rep_dots = self.__dot_products(x_rep)
         x_rep_relative_dots = x_rep_dots / torch.diagonal(x_rep_dots).unsqueeze(0).T
 
-        return self.alpha * torch.linalg.matrix_norm(x_relative_dots - x_rep_relative_dots, ord='fro') / x.shape[0]
+        raw_loss = torch.linalg.matrix_norm(x_relative_dots - x_rep_relative_dots, ord='fro') / x.shape[0]
+        
+        if return_raw:
+            return raw_loss
+        return self.alpha * raw_loss
 
     def __dot_products(self, x):
         _orig_dtype = x.dtype
@@ -47,5 +51,8 @@ class FLOPS:
     def __init__(self, alpha):
         self.alpha = alpha
 
-    def __call__(self, x_rep):
-        return self.alpha * torch.sum(torch.mean(torch.abs(x_rep), dim=0) ** 2)
+    def __call__(self, x_rep, return_raw=False):
+        raw_loss = torch.sum(torch.mean(torch.abs(x_rep), dim=0) ** 2)
+        if return_raw:
+            return raw_loss
+        return self.alpha * raw_loss
