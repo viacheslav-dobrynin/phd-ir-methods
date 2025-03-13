@@ -14,7 +14,10 @@ from pooling import mean_pooling
 
 
 class SparserModel(L.LightningModule):
-    def __init__(self, latent_dim, embs_kmeans_centroids, dataset_n, max_iter, hidden_dim=1000,
+    def __init__(self,
+                 embs_kmeans_centroids,
+                 dataset_n, max_iter,
+                 latent_dim, hidden_dim=1000,
 
                  elbo_loss_alpha=ELBO_LOSS_ALPHA,
                  distance_loss_alpha=DIST_LOSS_ALPHA,

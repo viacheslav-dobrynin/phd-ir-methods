@@ -8,7 +8,6 @@ DATASET = "msmarco_100000"
 LATENT_SIZE = 3000
 HIDDEN_DIM = 1500
 BACKBONE_MODEL_ID = "sentence-transformers/msmarco-distilbert-dot-v5"
-K_MEANS_LIB = "faiss"
 
 # TRAINING PARAMS
 SEED = 1
@@ -24,7 +23,7 @@ ANNEAL = True
 PROJECT = "Algorithm (iVAE)"
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 DEVICES = None  # 'auto' is default
-KMEANS_FILE = f'/content/drive/MyDrive/ITMO/Аспирантура/Диссертация/Алгоритм/kmeans_n{NUM_CLUSTERS}_{DATASET}_{K_MEANS_LIB}.pickle'
+KMEANS_FILE = f'/content/drive/MyDrive/ITMO/Аспирантура/Диссертация/Алгоритм/kmeans_n{NUM_CLUSTERS}_{DATASET}_faiss.pickle'
 EMBS_FILE = f'/content/drive/MyDrive/ITMO/Аспирантура/Диссертация/Алгоритм/embs_{DATASET}_{DEVICE.type}.pickle'
 
 
