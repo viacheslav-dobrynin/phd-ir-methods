@@ -125,11 +125,7 @@ def train(elbo_loss_alpha,
           batch_size=BATCH_SIZE,
           detect_anomaly=False,
           model_desc="",
-          use_residual=True,
-          use_adaptive_loss_scaling=True,
-          use_curriculum_learning=True,
-          curriculum_reg_start_factor=0.1,
-          adaptive_update_rate=0.05):
+          use_residual=True):
     torch.manual_seed(SEED)
     np.random.seed(SEED)
 
@@ -150,11 +146,6 @@ def train(elbo_loss_alpha,
 
                          activation='lrelu', slope=slope,
                          use_residual=use_residual,
-                         use_adaptive_loss_scaling=use_adaptive_loss_scaling,
-                         use_curriculum_learning=use_curriculum_learning,
-                         curriculum_reg_start_factor=curriculum_reg_start_factor,
-                         adaptive_update_rate=adaptive_update_rate,
-                         
                          device=DEVICE,
                          learning_rate=LEARNING_RATE,
                          anneal=ANNEAL)

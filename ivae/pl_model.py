@@ -27,10 +27,6 @@ class SparserModel(L.LightningModule):
                  n_layers=3, activation='lrelu', slope=.1,  # TODO: try slope=0.01
                  
                  use_residual=True,
-                 use_adaptive_loss_scaling=True,
-                 use_curriculum_learning=True,
-                 curriculum_reg_start_factor=0.1, # Start with 10% of the full regularization
-                 adaptive_update_rate=0.05,      # How quickly to adapt loss scales
 
                  device='cpu', learning_rate=LEARNING_RATE, anneal=False):
 
@@ -52,10 +48,6 @@ class SparserModel(L.LightningModule):
         self.learning_rate = learning_rate
         self.anneal_params = anneal
         self.use_residual = use_residual
-        self.use_adaptive_loss_scaling = use_adaptive_loss_scaling
-        self.use_curriculum_learning = use_curriculum_learning
-        self.curriculum_reg_start_factor = curriculum_reg_start_factor
-        self.adaptive_update_rate = adaptive_update_rate
         self.embs_kmeans_index = faiss.IndexFlatL2(embs_kmeans_centroids.shape[1])
         self.embs_kmeans_index.add(embs_kmeans_centroids)
         self.dataset_n = dataset_n
@@ -94,7 +86,6 @@ class SparserModel(L.LightningModule):
         self.regularization_loss = FLOPS(alpha=regularization_loss_alpha)
         self.distance_loss = DistanceLoss(alpha=distance_loss_alpha)
 
-        # self.apply(weights_init)
         self.logl.apply(weights_init)
         self.f.apply(weights_init)
         self.g.apply(weights_init)
@@ -165,144 +156,51 @@ class SparserModel(L.LightningModule):
     def training_step(self, batch, batch_idx):
         self.training_step_count += 1
         self.anneal(self.dataset_n, self.max_iter, self.training_step_count)
-        
+
         token_ids, token_mask = batch
         x, u = self.__encode_to_x_and_u(token_ids=token_ids, token_mask=token_mask)
 
         elbo, z = self.elbo(x, u)
-        
-        # Calculate raw losses
-        raw_elbo_loss = elbo.mul(-1)
-        raw_reg_loss = self.regularization_loss(z, return_raw=True) if self.use_adaptive_loss_scaling or self.use_curriculum_learning else None
-        raw_dist_loss = self.distance_loss(x, z, return_raw=True) if self.use_adaptive_loss_scaling else None
-        
-        # Compute the sparsity level
+        elbo_loss = self.elbo_loss_alpha * elbo.mul(-1)
+        reg_loss = self.regularization_loss(z)
+        dist_loss = self.distance_loss(x, z)
         z_nonzero = torch.sum(torch.abs(z) >= 1e-3).float() / len(z)
-        
-        # Apply curriculum learning to gradually increase sparsity constraints
-        if self.use_curriculum_learning:
-            # Get progress ratio for curriculum learning (0 at start, 1 at end)
-            progress = min(1.0, self.training_step_count / self.max_iter)
-            curriculum_reg_alpha = self.regularization_loss.alpha * (self.curriculum_reg_start_factor + (1.0 - self.curriculum_reg_start_factor) * progress)
-        else:
-            progress = 1.0
-            curriculum_reg_alpha = self.regularization_loss.alpha
-        
-        # Balance losses dynamically using their magnitudes
-        if self.use_adaptive_loss_scaling:
-            if self.training_step_count > 1 and hasattr(self, 'loss_scales'):
-                # Use exponential moving average to update scales
-                self.loss_scales = {
-                    'elbo': self.loss_scales['elbo'] * (1 - self.adaptive_update_rate) + 
-                            self.adaptive_update_rate / max(abs(raw_elbo_loss.item()), 1e-8),
-                    'reg': self.loss_scales['reg'] * (1 - self.adaptive_update_rate) + 
-                           self.adaptive_update_rate / max(abs(raw_reg_loss.item()), 1e-8),
-                    'dist': self.loss_scales['dist'] * (1 - self.adaptive_update_rate) + 
-                            self.adaptive_update_rate / max(abs(raw_dist_loss.item()), 1e-8)
-                }
-            else:
-                # Initialize on first batch
-                self.loss_scales = {
-                    'elbo': 1.0 / max(abs(raw_elbo_loss.item()), 1e-8),
-                    'reg': 1.0 / max(abs(raw_reg_loss.item()), 1e-8),
-                    'dist': 1.0 / max(abs(raw_dist_loss.item()), 1e-8)
-                }
-            
-            # Scale the losses to be roughly of the same magnitude
-            # Then apply the intended importance weights
-            elbo_loss = raw_elbo_loss * self.loss_scales['elbo'] * self.elbo_loss_alpha
-            reg_loss = raw_reg_loss * self.loss_scales['reg'] * curriculum_reg_alpha
-            dist_loss = raw_dist_loss * self.loss_scales['dist'] * self.distance_loss.alpha
-        else:
-            # Use fixed scaling
-            elbo_loss = self.elbo_loss_alpha * raw_elbo_loss
-            reg_loss = curriculum_reg_alpha * self.regularization_loss(z) if self.use_curriculum_learning else self.regularization_loss(z)
-            dist_loss = self.distance_loss(x, z)
-        
+
         loss = elbo_loss + reg_loss + dist_loss
-        
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
-        # Prepare output metrics
         outs = {
             "loss": loss,
             "elbo_loss": elbo_loss,
             "reg_loss": reg_loss,
             "dist_loss": dist_loss,
             "z_nonzero": z_nonzero,
-            "curriculum_progress": progress,
         }
-        
-        # Add adaptive scaling metrics if enabled
-        if self.use_adaptive_loss_scaling and hasattr(self, 'loss_scales'):
-            outs.update({
-                "elbo_scale": self.loss_scales['elbo'],
-                "reg_scale": self.loss_scales['reg'],
-                "dist_scale": self.loss_scales['dist'],
-            })
-        
         self.training_step_outputs.append(outs)
-        
-        # Log to wandb
         if batch_idx % LOG_EVERY == 0:
-            log_data = {
-                'loss': loss,
-                'elbo loss': elbo_loss.detach().clone(),
-                'regularization loss': reg_loss.detach().clone(),
-                'distance loss': dist_loss.detach().clone(),
-                'nonzero count': z_nonzero.detach().clone(),
-            }
-            
-            # Log curriculum progress if enabled
-            if self.use_curriculum_learning:
-                log_data['curriculum progress'] = progress
-                log_data['curriculum reg factor'] = curriculum_reg_alpha / self.regularization_loss.alpha
-            
-            # Log adaptive scales if enabled
-            if self.use_adaptive_loss_scaling and hasattr(self, 'loss_scales'):
-                log_data['elbo scale'] = self.loss_scales['elbo']
-                log_data['reg scale'] = self.loss_scales['reg'] 
-                log_data['dist scale'] = self.loss_scales['dist']
-            
-            wandb.log(log_data)
+            wandb.log({'loss': loss})
+            wandb.log({'elbo loss': elbo_loss.detach().clone()})
+            wandb.log({'regularization loss': reg_loss.detach().clone()})
+            wandb.log({'distance loss': dist_loss.detach().clone()})
+            wandb.log({'nonzero count': z_nonzero.detach().clone()})
 
         return loss
 
     def on_train_epoch_end(self):
         outs = self.training_step_outputs
-        if not outs:
-            return
-            
         loss = torch.stack([out['loss'] for out in outs]).mean()
         elbo_loss = torch.stack([out['elbo_loss'] for out in outs]).mean()
         reg_loss = torch.stack([out['reg_loss'] for out in outs]).mean()
         dist_loss = torch.stack([out['dist_loss'] for out in outs]).mean()
         z_nonzero = torch.stack([out['z_nonzero'] for out in outs]).mean()
-        
-        # Build status message
-        status_msg = [
-            f"loss = {loss:.2f}:",
-            f"elbo loss = {elbo_loss:.2f},",
-            f"regularization loss = {reg_loss:.2f},",
-            f"distance loss = {dist_loss:.2f},",
-            f"nonzero count = {z_nonzero:.0f},"
-        ]
-        
-        # Add adaptive scaling info if available
-        if self.use_adaptive_loss_scaling and 'elbo_scale' in outs[-1]:
-            elbo_scale = outs[-1]['elbo_scale']
-            reg_scale = outs[-1]['reg_scale'] 
-            dist_scale = outs[-1]['dist_scale']
-            status_msg.append(f"scales (elbo={elbo_scale:.2e}, reg={reg_scale:.2e}, dist={dist_scale:.2e}),")
-        
-        # Add curriculum learning info if available
-        if self.use_curriculum_learning:
-            curr_progress = outs[-1]['curriculum_progress']
-            status_msg.append(f"curriculum progress = {curr_progress:.2f},")
-        
-        # Add annealing info
-        status_msg.append(f"training hyperparams = {self._training_hyperparams}")
-        
-        print(" ".join(status_msg))
+
+        print(
+            f"loss = {loss:.2f}: " +
+            f"elbo loss = {elbo_loss:.2f}, " +
+            f"regularization loss = {reg_loss:.2f}, " +
+            f"distance loss = {dist_loss:.2f}, " +
+            f"nonzero count = {z_nonzero:.0f}, " +
+            f"training hyperparams = {self._training_hyperparams}"
+        )
         self.training_step_outputs.clear()
 
     def configure_optimizers(self):
