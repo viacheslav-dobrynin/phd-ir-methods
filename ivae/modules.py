@@ -14,14 +14,12 @@ def weights_init(m):
 
 
 class MLP(nn.Module):
-    def __init__(self, input_dim, output_dim, hidden_dim, n_layers, activation='none', slope=.1, device='cpu', use_residual=True):
+    def __init__(self, input_dim, output_dim, hidden_dim, n_layers, activation='none', slope=.1, device='cpu'):
         super().__init__()
         self.input_dim = input_dim
         self.output_dim = output_dim
         self.n_layers = n_layers
         self.device = device
-        self.use_residual = use_residual
-        
         if isinstance(hidden_dim, Number):
             self.hidden_dim = [hidden_dim] * (self.n_layers - 1)
         elif isinstance(hidden_dim, list):
@@ -57,29 +55,6 @@ class MLP(nn.Module):
                 _fc_list.append(nn.Linear(self.hidden_dim[i - 1], self.hidden_dim[i]))
             _fc_list.append(nn.Linear(self.hidden_dim[self.n_layers - 2], self.output_dim))
         self.fc = nn.ModuleList(_fc_list)
-        
-        # Projection layers for residual connections when dimensions don't match
-        if self.use_residual:
-            self.projections = nn.ModuleList()
-            # First projection from input to first hidden layer
-            if self.n_layers > 1:
-                self.projections.append(nn.Linear(self.input_dim, self.hidden_dim[0], bias=False) 
-                                        if self.input_dim != self.hidden_dim[0] else None)
-                
-                # Projections between hidden layers
-                for i in range(1, self.n_layers - 1):
-                    if self.hidden_dim[i-1] != self.hidden_dim[i]:
-                        self.projections.append(nn.Linear(self.hidden_dim[i-1], self.hidden_dim[i], bias=False))
-                    else:
-                        self.projections.append(None)
-                
-                # Final projection to output
-                self.projections.append(nn.Linear(self.hidden_dim[-1], self.output_dim, bias=False)
-                                        if self.hidden_dim[-1] != self.output_dim else None)
-            else:
-                self.projections.append(nn.Linear(self.input_dim, self.output_dim, bias=False)
-                                        if self.input_dim != self.output_dim else None)
-            
         self.to(self.device)
 
     @staticmethod
@@ -89,30 +64,11 @@ class MLP(nn.Module):
 
     def forward(self, x):
         h = x
-        
         for c in range(self.n_layers):
-            if not self.use_residual:
-                if c == self.n_layers - 1:
-                    h = self.fc[c](h)
-                else:
-                    h = self._act_f[c](self.fc[c](h))
+            if c == self.n_layers - 1:
+                h = self.fc[c](h)
             else:
-                # Store the input for the residual connection
-                residual = h
-                
-                # Apply the layer transform
-                if c == self.n_layers - 1:
-                    transformed = self.fc[c](h)
-                else:
-                    transformed = self._act_f[c](self.fc[c](h))
-                
-                # Apply the residual connection with dimension matching if needed
-                if self.projections[c] is not None:
-                    residual = self.projections[c](residual)
-                    
-                # Add the residual connection
-                h = transformed + residual
-                
+                h = self._act_f[c](self.fc[c](h))
         return h
 
 
