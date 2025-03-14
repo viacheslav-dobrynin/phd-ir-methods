@@ -48,7 +48,7 @@ class SparserModel(L.LightningModule):
         self.slope = slope
         self.learning_rate = learning_rate
         self.anneal_params = anneal
-        self.embs_kmeans_index = faiss.IndexFlatL2(embs_kmeans_centroids.shape[1])
+        self.embs_kmeans_index = faiss.IndexFlatL2(embs_kmeans_centroids.shape[1]) # TODO: gpu version can be used
         self.embs_kmeans_index.add(embs_kmeans_centroids)
         self.dataset_n = dataset_n
         self.max_iter = max_iter
