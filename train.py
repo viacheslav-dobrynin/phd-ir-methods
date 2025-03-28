@@ -1,5 +1,6 @@
 import os
 import pickle
+from typing import Callable, Optional, List, Tuple
 
 import numpy as np
 import pytorch_lightning as L
@@ -9,44 +10,27 @@ from transformers import AutoTokenizer, AutoModel
 
 from dataset import get_dataloader
 from ivae.pl_model import SparserModel
-from loss import FLOPS
-from params import (K_MEANS_LIB, NUM_CLUSTERS, KMEANS_FILE, EMBS_FILE, BACKBONE_MODEL_ID, DEVICE, SEED,
-                    REG_LOSS_ALPHA, LATENT_SIZE, HIDDEN_DIM, ELBO_LOSS_ALPHA, DIST_LOSS_ALPHA, ANNEAL, PROJECT, EPOCHS,
-                    DEVICES, LEARNING_RATE)
+from params import (NUM_CLUSTERS, KMEANS_FILE, EMBS_FILE, BACKBONE_MODEL_ID, DEVICE, SEED,
+                    LATENT_SIZE, HIDDEN_DIM, ANNEAL, PROJECT, EPOCHS,
+                    DEVICES, LEARNING_RATE, DATASET, BATCH_SIZE)
 from pooling import mean_pooling
 from util.model import create_model_name
 
 
 def fit_kmeans(embs):
-    if K_MEANS_LIB == "fast_pytorch_kmeans":
-        import fast_pytorch_kmeans
-        kmeans = fast_pytorch_kmeans.KMeans(
-            n_clusters=NUM_CLUSTERS,
-            init_method="kmeans++",
-            max_iter=300,
-            minibatch=1000)
-        kmeans.fit(embs)
-        return kmeans
-    elif K_MEANS_LIB == "torch_kmeans":
-        import torch_kmeans
-        kmeans = torch_kmeans.KMeans(
-            n_clusters=NUM_CLUSTERS,
-            init_method='k-means++',
-            max_iter=300)
-        # torch.stack(embs.split(split_size=100)[:-1])
-        # kmeans.fit(torch.stack(embs[:3000].split(split_size=100)[:-1]))
-        kmeans.fit(embs.unsqueeze(0))
-        return kmeans
-    elif K_MEANS_LIB == "sklearn":
-        import sklearn
-        kmeans = sklearn.cluster.KMeans(n_clusters=NUM_CLUSTERS)
-        kmeans.fit(embs)
-        return kmeans
-    else:
-        raise ValueError("Unknown k-means lib:", K_MEANS_LIB)
+    import faiss
+    kmeans = faiss.Kmeans(
+        d=embs.shape[-1],
+        k=NUM_CLUSTERS,
+        niter=4,
+        gpu=torch.cuda.is_available(),
+        verbose=True,
+        seed=123)
+    kmeans.train(embs.cpu().detach().numpy())
+    return kmeans.centroids
 
 
-def get_kmeans(dataloader):
+def get_kmeans_centroids(dataloader):
     backbone = AutoModel.from_pretrained(BACKBONE_MODEL_ID).to(DEVICE)
     backbone.eval()
     for p in backbone.parameters():
@@ -102,20 +86,37 @@ def get_trainer(logger, detect_anomaly):
         return L.Trainer(max_epochs=EPOCHS, logger=logger, detect_anomaly=detect_anomaly)
 
 
-def train(slope=.1, detect_anomaly=False, model_desc=""):
+EvalFunctionType = Optional[Callable[[SparserModel], Tuple[List[str], List[List[str]]]]]
+
+
+def train(elbo_loss_alpha,
+          distance_loss_alpha,
+          regularization_loss_alpha,
+          decoder_var_coef=.01,
+          slope=.1,
+          eval_fun: EvalFunctionType = None,
+          dataset_name=DATASET,
+          batch_size=BATCH_SIZE,
+          detect_anomaly=False,
+          model_desc=""):
     torch.manual_seed(SEED)
     np.random.seed(SEED)
 
     tokenizer = AutoTokenizer.from_pretrained(BACKBONE_MODEL_ID, use_fast=True)
-    dataloader, dataset_n, max_iter = get_dataloader(tokenizer)
-    kmeans = get_kmeans(dataloader)
+    dataloader, dataset_n, max_iter = get_dataloader(tokenizer=tokenizer,
+                                                     dataset_name=dataset_name,
+                                                     batch_size=batch_size)
+    doc_embs_kmeans_centroids = get_kmeans_centroids(dataloader)
 
-    model = SparserModel(latent_dim=LATENT_SIZE, embs_kmeans=kmeans, dataset_n=dataset_n, max_iter=max_iter,
-                         hidden_dim=HIDDEN_DIM,
+    model = SparserModel(embs_kmeans_centroids=doc_embs_kmeans_centroids,
+                         dataset_n=dataset_n, max_iter=max_iter,
+                         latent_dim=LATENT_SIZE, hidden_dim=HIDDEN_DIM,
 
-                         elbo_loss_alpha=ELBO_LOSS_ALPHA,
-                         distance_loss_alpha=DIST_LOSS_ALPHA,
-                         regularization_loss=FLOPS(alpha=REG_LOSS_ALPHA),
+                         elbo_loss_alpha=elbo_loss_alpha,
+                         distance_loss_alpha=distance_loss_alpha,
+                         regularization_loss_alpha=regularization_loss_alpha,
+
+                         decoder_var_coef=decoder_var_coef,
 
                          activation='lrelu', slope=slope,
                          device=DEVICE,
@@ -123,8 +124,13 @@ def train(slope=.1, detect_anomaly=False, model_desc=""):
                          anneal=ANNEAL)
 
     model_name = create_model_name(model=model, desc=model_desc)
-    wandb.init(project=PROJECT, name=model_name)  # mode="disabled"
-    wandb_logger = L.loggers.WandbLogger(project=PROJECT, log_model=True, name=model_name, id=model_name)
-    trainer = get_trainer(logger=wandb_logger, detect_anomaly=detect_anomaly)
-    trainer.fit(model=model, train_dataloaders=dataloader)
-    wandb.finish()
+    try:
+        wandb.init(project=PROJECT, name=model_name)  # mode="disabled"
+        wandb_logger = L.loggers.WandbLogger(project=PROJECT, log_model=True, name=model_name, id=model_name)
+        trainer = get_trainer(logger=wandb_logger, detect_anomaly=detect_anomaly)
+        trainer.fit(model=model, train_dataloaders=dataloader)
+        if eval_fun:
+            columns, data = eval_fun(model)
+            wandb_logger.log_text(key="eval_metrics", columns=columns, data=data)
+    finally:
+        wandb.finish()
