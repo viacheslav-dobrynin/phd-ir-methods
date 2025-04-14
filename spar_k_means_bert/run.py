@@ -12,7 +12,7 @@ from beir.retrieval.evaluation import EvaluateRetrieval
 from torch.utils.data import Dataset, DataLoader
 from transformers import AutoTokenizer, AutoModel
 
-from dataset import load_dataset
+from util.datasets import load_dataset
 from params import DEVICE
 from spar_k_means_bert.lucene_index import LuceneIndex
 from spar_k_means_bert.in_memory_inverted_index import InMemoryInvertedIndex

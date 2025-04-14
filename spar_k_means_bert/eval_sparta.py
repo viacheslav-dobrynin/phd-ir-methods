@@ -1,7 +1,7 @@
 from beir.retrieval.evaluation import EvaluateRetrieval
 from beir.retrieval.search.sparse import SparseSearch
 
-from dataset import load_dataset
+from util.datasets import load_dataset
 
 from typing import List, Dict
 from tqdm.autonotebook import trange

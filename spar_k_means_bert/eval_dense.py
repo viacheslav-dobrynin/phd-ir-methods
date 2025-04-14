@@ -5,7 +5,7 @@ from beir.retrieval import models
 from beir.retrieval.evaluation import EvaluateRetrieval
 from beir.retrieval.search.dense import HNSWFaissSearch
 
-from dataset import load_dataset
+from util.datasets import load_dataset
 
 corpus, queries, qrels = load_dataset()
 print(f"Corpus size={len(corpus)}, queries size={len(queries)}, qrels size={len(qrels)}")
