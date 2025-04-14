@@ -1,13 +1,12 @@
 import torch
 
-from params import DEVICE
 from util.pooling import mean_pooling
 
 
-def build_encode_dense_fun(tokenizer, model):
+def build_encode_dense_fun(tokenizer, model, device):
     def encode_dense(docs):
         # Tokenize sentences
-        encoded_input = tokenizer(docs, padding=True, truncation=True, return_tensors='pt').to(DEVICE)
+        encoded_input = tokenizer(docs, padding=True, truncation=True, return_tensors='pt').to(device)
         # Compute token embeddings
         with torch.no_grad():
             model_output = model(**encoded_input, return_dict=True)
