@@ -2,7 +2,7 @@ from unittest import TestCase
 
 import torch
 
-from util.in_memory_index import InMemoryInvertedIndex
+from common.in_memory_index import InMemoryInvertedIndex
 
 
 class TestInMemoryInvertedIndex(TestCase):

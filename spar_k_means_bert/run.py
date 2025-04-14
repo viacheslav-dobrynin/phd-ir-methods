@@ -14,8 +14,8 @@ from transformers import AutoTokenizer, AutoModel
 
 from spar_k_means_bert.in_memory_inverted_index import InMemoryInvertedIndex
 from spar_k_means_bert.lucene_index import LuceneIndex
-from util.datasets import load_dataset
-from util.encode_dense_fun_builder import build_encode_dense_fun
+from common.datasets import load_dataset
+from common.encode_dense_fun_builder import build_encode_dense_fun
 
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 

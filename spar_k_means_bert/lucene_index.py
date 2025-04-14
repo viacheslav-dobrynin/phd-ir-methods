@@ -15,8 +15,8 @@ from org.apache.lucene.queries.function import FunctionQuery
 from org.apache.lucene.queries.function.valuesource import FloatFieldSource
 from org.apache.lucene.queries.function.valuesource import SumFloatFunction
 
-from util.field import to_doc_id_field
-from util.path import delete_folder
+from common.field import to_doc_id_field
+from common.path import delete_folder
 
 
 class LuceneIndex:

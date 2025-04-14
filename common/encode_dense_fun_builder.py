@@ -1,6 +1,6 @@
 import torch
 
-from util.pooling import mean_pooling
+from common.pooling import mean_pooling
 
 
 def build_encode_dense_fun(tokenizer, model, device):
