@@ -13,7 +13,7 @@ from ivae.pl_model import SparserModel
 from params import (NUM_CLUSTERS, KMEANS_FILE, EMBS_FILE, BACKBONE_MODEL_ID, DEVICE, SEED,
                     LATENT_SIZE, HIDDEN_DIM, ANNEAL, PROJECT, EPOCHS,
                     DEVICES, LEARNING_RATE, DATASET, BATCH_SIZE)
-from pooling import mean_pooling
+from util.pooling import mean_pooling
 from util.model import create_model_name
 
 

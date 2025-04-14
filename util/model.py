@@ -1,7 +1,7 @@
 import torch
 
 from params import DEVICE, MAX_LENGTH
-from pooling import mean_pooling
+from util.pooling import mean_pooling
 
 
 def create_model_name(model, desc=""):

@@ -10,7 +10,7 @@ from loss import DistanceLoss, FLOPS
 from params import (BACKBONE_MODEL_ID, LEARNING_RATE, ELBO_LOSS_ALPHA,
                     DIST_LOSS_ALPHA, REG_LOSS_ALPHA,
                     LOG_EVERY)
-from pooling import mean_pooling
+from util.pooling import mean_pooling
 
 
 class SparserModel(L.LightningModule):
