@@ -7,9 +7,9 @@ from transformers import AutoModel
 
 from sparsifier_model.ivae.modules import Normal, MLP, weights_init
 from sparsifier_model.loss import DistanceLoss, FLOPS
-from params import (BACKBONE_MODEL_ID, LEARNING_RATE, ELBO_LOSS_ALPHA,
-                    DIST_LOSS_ALPHA, REG_LOSS_ALPHA,
-                    LOG_EVERY)
+from sparsifier_model.params import (BACKBONE_MODEL_ID, LEARNING_RATE, ELBO_LOSS_ALPHA,
+                                     DIST_LOSS_ALPHA, REG_LOSS_ALPHA,
+                                     LOG_EVERY)
 from util.pooling import mean_pooling
 
 

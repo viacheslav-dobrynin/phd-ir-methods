@@ -1,6 +1,6 @@
 import torch
 
-from params import DEVICE, MAX_LENGTH
+from sparsifier_model.params import DEVICE, MAX_LENGTH
 
 
 def create_model_name(model, desc=""):

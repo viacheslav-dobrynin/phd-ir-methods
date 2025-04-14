@@ -3,7 +3,7 @@ import pandas as pd
 from nltk.corpus import reuters
 from torch.utils.data import Dataset, DataLoader
 
-from params import MAX_LENGTH, EPOCHS
+from sparsifier_model.params import MAX_LENGTH, EPOCHS
 from util.datasets import load_dataset
 
 nltk.download('stopwords')
