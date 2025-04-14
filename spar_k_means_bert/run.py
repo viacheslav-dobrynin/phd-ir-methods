@@ -16,7 +16,7 @@ from util.datasets import load_dataset
 from params import DEVICE
 from spar_k_means_bert.lucene_index import LuceneIndex
 from spar_k_means_bert.in_memory_inverted_index import InMemoryInvertedIndex
-from util.model import build_encode_dense_fun
+from util.encode_dense_fun_builder import build_encode_dense_fun
 
 
 class CorpusDataset(Dataset):
