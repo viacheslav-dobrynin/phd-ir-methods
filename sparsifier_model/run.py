@@ -10,11 +10,11 @@ from org.apache.lucene.search import IndexSearcher
 from org.apache.lucene.store import FSDirectory
 from tqdm.autonotebook import trange
 
-from dataset import load_dataset
+from util.datasets import load_dataset
 from util.path import delete_folder
 from util.field import to_field_name, to_doc_id_field
 from util.search import build_query
-from in_memory_index import InMemoryInvertedIndex
+from util.in_memory_index import InMemoryInvertedIndex
 
 
 class InMemoryIndexRunner:

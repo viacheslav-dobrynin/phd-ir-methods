@@ -12,11 +12,12 @@ from beir.retrieval.evaluation import EvaluateRetrieval
 from torch.utils.data import Dataset, DataLoader
 from transformers import AutoTokenizer, AutoModel
 
-from dataset import load_dataset
-from params import DEVICE
-from spar_k_means_bert.lucene_index import LuceneIndex
 from spar_k_means_bert.in_memory_inverted_index import InMemoryInvertedIndex
-from util.model import build_encode_dense_fun
+from spar_k_means_bert.lucene_index import LuceneIndex
+from common.datasets import load_dataset
+from common.encode_dense_fun_builder import build_encode_dense_fun
+
+DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 class CorpusDataset(Dataset):
@@ -147,13 +148,14 @@ def build_inverted_index():
         contextualized_embs = contextualized_embs.squeeze(0)
         _, I = hnsw_index.search(contextualized_embs, args.index_n_neighbors)
         assert len(I) == len(contextualized_embs)
-        faiss_ids = np.unique(I.flatten()) # this help to remove token repetition
+        faiss_ids = np.unique(I.flatten())  # this help to remove token repetition
         token_and_cluster_id_list = [faiss_idx_to_token[id] for id in faiss_ids]
         centroids = torch.from_numpy(hnsw_index.reconstruct_batch(faiss_ids))
         scores = torch.max(contextualized_embs @ centroids.T, dim=0).values  # MaxSim
         inverted_index.index(doc_id, token_and_cluster_id_list, scores)
     inverted_index.complete_indexing()
     return inverted_index
+
 
 def query_tokens_calculator(query):
     tokenized_query = tokenize(query)
@@ -195,7 +197,7 @@ if __name__ == '__main__':
     dataset = CorpusDataset(corpus)
     dataloader = DataLoader(dataset=dataset, batch_size=args.batch_size)
     model = load_model()
-    encode_dense = build_encode_dense_fun(tokenizer=tokenizer, model=model)
+    encode_dense = build_encode_dense_fun(tokenizer=tokenizer, model=model, device=DEVICE)
     threshold = 0.8 * encode_dense("She enjoys reading books in her free time.") @ encode_dense("In her leisure hours, she likes to read novels.").T
     threshold = threshold.squeeze(0).cpu()
     print(f"Dense similarity threshold: {threshold}")

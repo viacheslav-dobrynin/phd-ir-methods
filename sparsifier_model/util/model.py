@@ -1,7 +1,6 @@
 import torch
 
-from params import DEVICE, MAX_LENGTH
-from pooling import mean_pooling
+from sparsifier_model.params import DEVICE, MAX_LENGTH
 
 
 def create_model_name(model, desc=""):
@@ -39,15 +38,3 @@ def build_encode_sparse_fun(tokenizer, model, threshold, zeroing_type="quantile"
     return encode_sparse_from_docs if tokenizer else encode_sparse_from_tokens
 
 
-def build_encode_dense_fun(tokenizer, model):
-    def encode_dense(docs):
-        # Tokenize sentences
-        encoded_input = tokenizer(docs, padding=True, truncation=True, return_tensors='pt').to(DEVICE)
-        # Compute token embeddings
-        with torch.no_grad():
-            model_output = model(**encoded_input, return_dict=True)
-        # Perform pooling
-        embeddings = mean_pooling(model_output, encoded_input['attention_mask'])
-        return embeddings
-
-    return encode_dense

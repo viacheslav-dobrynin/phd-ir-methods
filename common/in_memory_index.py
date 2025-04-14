@@ -1,6 +1,7 @@
 from collections import defaultdict
-from typing import Dict
+
 import torch
+
 
 class InMemoryInvertedIndex:
     def __init__(self):

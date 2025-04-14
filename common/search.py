@@ -2,7 +2,7 @@ import torch
 from org.apache.lucene.search import BooleanClause, BooleanQuery
 from ru.itmo.sparsifiermodel.query import FieldValueAsScoreQuery
 
-from util.field import to_field_name
+from common.field import to_field_name
 
 
 def build_query(query):
