@@ -1,6 +1,6 @@
 import torch
 
-from sparsifier_model.params import DEVICE, MAX_LENGTH
+from sparsifier_model.config import Config
 
 
 def create_model_name(model, desc=""):
@@ -13,13 +13,13 @@ def create_model_name(model, desc=""):
             desc)
 
 
-def build_encode_sparse_fun(tokenizer, model, threshold, zeroing_type="quantile"):
+def build_encode_sparse_fun(config: Config, tokenizer, model, threshold, zeroing_type="quantile"):
     def encode_sparse_from_tokens(token_ids, token_mask):
         with torch.no_grad():
             z = model.encode(token_ids=token_ids, token_mask=token_mask)
             if threshold is not None:
                 if zeroing_type == "quantile":
-                    q = torch.quantile(z, torch.tensor([threshold, 1.0 - threshold]).to(DEVICE), dim=1, keepdim=True)
+                    q = torch.quantile(z, torch.tensor([threshold, 1.0 - threshold]).to(config.device), dim=1, keepdim=True)
                     z = torch.where((z <= q[0]) | (z >= q[1]), z, 0.0)
                 elif zeroing_type == "threshold":
                     z[torch.abs(z) < threshold] = 0
@@ -32,7 +32,7 @@ def build_encode_sparse_fun(tokenizer, model, threshold, zeroing_type="quantile"
                               return_tensors="pt",
                               padding='max_length',
                               truncation=True,
-                              max_length=MAX_LENGTH).to(DEVICE)
+                              max_length=config.max_length).to(config.device)
         return encode_sparse_from_tokens(token_ids=tokenized["input_ids"], token_mask=tokenized["attention_mask"])
 
     return encode_sparse_from_docs if tokenizer else encode_sparse_from_tokens
