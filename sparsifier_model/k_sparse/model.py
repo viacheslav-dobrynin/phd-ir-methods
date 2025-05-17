@@ -1,6 +1,7 @@
 from typing import Any
 
 import pytorch_lightning as L
+from sparsifier_model.config import Config
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -21,12 +22,10 @@ class Autoencoder(L.LightningModule):
     """
 
     def __init__(
-            self,
-            n_latents: int,
-            k: int,
-            tied: bool = False,
-            normalize: bool = False,
-            learning_rate=1e-4,
+        self,
+        config: Config,
+        tied: bool = False,
+        normalize: bool = False,
     ) -> None:
         """
         :param n_latents: dimension of the autoencoder latent
@@ -36,7 +35,7 @@ class Autoencoder(L.LightningModule):
         """
         super().__init__()
         self.save_hyperparameters()
-        backbone = AutoModel.from_pretrained(BACKBONE_MODEL_ID).to(DEVICE)
+        backbone = AutoModel.from_pretrained(config.backbone_model_id).to(config.device)
         backbone.eval()
         for p in backbone.parameters():
             p.requires_grad = False
@@ -44,28 +43,36 @@ class Autoencoder(L.LightningModule):
         n_inputs = backbone.config.hidden_size
 
         self.pre_bias = nn.Parameter(torch.zeros(n_inputs))
-        self.encoder: nn.Module = nn.Linear(n_inputs, n_latents, bias=False)
-        self.latent_bias = nn.Parameter(torch.zeros(n_latents))
-        self.activation = TopK(k=k)
+        self.encoder: nn.Module = nn.Linear(n_inputs, config.latent_dim, bias=False)
+        self.latent_bias = nn.Parameter(torch.zeros(config.latent_dim))
+        self.activation = TopK(k=config.k)
         if tied:
             self.decoder: nn.Linear | TiedTranspose = TiedTranspose(self.encoder)
         else:
-            self.decoder = nn.Linear(n_latents, n_inputs, bias=False)
+            self.decoder = nn.Linear(config.latent_dim, n_inputs, bias=False)
         self.normalize = normalize
-        self.learning_rate = learning_rate
+        self.learning_rate = config.learning_rate
         self.distance_loss = DistanceLoss(alpha=1)
         self.training_step_outputs = []
+        self.log_every = config.log_every
 
         self.stats_last_nonzero: torch.Tensor
         self.latents_activation_frequency: torch.Tensor
         self.latents_mean_square: torch.Tensor
-        self.register_buffer("stats_last_nonzero", torch.zeros(n_latents, dtype=torch.long))
         self.register_buffer(
-            "latents_activation_frequency", torch.ones(n_latents, dtype=torch.float)
+            "stats_last_nonzero", torch.zeros(config.latent_dim, dtype=torch.long)
         )
-        self.register_buffer("latents_mean_square", torch.zeros(n_latents, dtype=torch.float))
+        self.register_buffer(
+            "latents_activation_frequency",
+            torch.ones(config.latent_dim, dtype=torch.float),
+        )
+        self.register_buffer(
+            "latents_mean_square", torch.zeros(config.latent_dim, dtype=torch.float)
+        )
 
-    def encode_pre_act(self, x: torch.Tensor, latent_slice: slice = slice(None)) -> torch.Tensor:
+    def encode_pre_act(
+        self, x: torch.Tensor, latent_slice: slice = slice(None)
+    ) -> torch.Tensor:
         """
         :param x: input data (shape: [batch, n_inputs])
         :param latent_slice: slice of latents to compute
@@ -94,7 +101,9 @@ class Autoencoder(L.LightningModule):
         x, info = self.preprocess(x)
         return self.activation(self.encode_pre_act(x)), info
 
-    def decode(self, latents: torch.Tensor, info: dict[str, Any] | None = None) -> torch.Tensor:
+    def decode(
+        self, latents: torch.Tensor, info: dict[str, Any] | None = None
+    ) -> torch.Tensor:
         """
         :param latents: autoencoder latents (shape: [batch, n_latents])
         :return: reconstructed data (shape: [batch, n_inputs])
@@ -105,7 +114,9 @@ class Autoencoder(L.LightningModule):
             ret = ret * info["std"] + info["mu"]
         return ret
 
-    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def forward(
+        self, x: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         :param x: input data (shape: [batch, n_inputs])
         :return:  autoencoder latents pre activation (shape: [batch, n_latents])
@@ -140,26 +151,29 @@ class Autoencoder(L.LightningModule):
             "dist_loss": dist_loss,
         }
         self.training_step_outputs.append(outs)
-        if batch_idx % LOG_EVERY == 0:
-            wandb.log({'loss': loss})
+        if batch_idx % self.log_every == 0:
+            wandb.log({"loss": loss})
             # wandb.log({'regularization loss': reg_loss.detach().clone()})
-            wandb.log({'distance loss': dist_loss.detach().clone()})
+            wandb.log({"distance loss": dist_loss.detach().clone()})
 
         return loss
 
     def on_train_epoch_end(self):
         outs = self.training_step_outputs
-        loss = torch.stack([out['loss'] for out in outs]).mean()
+        loss = torch.stack([out["loss"] for out in outs]).mean()
         # reg_loss = torch.stack([out['reg_loss'] for out in outs]).mean()
-        dist_loss = torch.stack([out['dist_loss'] for out in outs]).mean()
+        dist_loss = torch.stack([out["dist_loss"] for out in outs]).mean()
 
         print(
-            f"loss = {loss:.2f}: " +
+            f"loss = {loss:.2f}: "
+            +
             # f"regularization loss = {reg_loss:.2f}, " +
             f"distance loss = {dist_loss:.2f}"
         )
         self.training_step_outputs.clear()
 
     def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(self.parameters(), lr=self.learning_rate, weight_decay=0.01)
+        optimizer = torch.optim.AdamW(
+            self.parameters(), lr=self.learning_rate, weight_decay=0.01
+        )
         return optimizer
