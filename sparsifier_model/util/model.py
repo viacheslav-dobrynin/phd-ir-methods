@@ -1,25 +1,46 @@
+from sparsifier_model.ivae.pl_model import SparserModel
+from sparsifier_model.k_sparse.model import Autoencoder
 import torch
 
-from sparsifier_model.params import DEVICE, MAX_LENGTH
+from sparsifier_model.config import Config
 
 
 def create_model_name(model, desc=""):
-    return ("iVAE_s" + str(model.latent_dim) +
-            "_elbo_" + str(model.elbo_loss_alpha) +
-            f"_{model.regularization_loss.__class__.__name__}_{str(model.regularization_loss.alpha)}" +
-            "_dist_" + str(model.distance_loss.alpha) +
-            "_aux_dim_" + str(model.aux_dim) +
-            "_slope_" + str(model.slope) +
-            desc)
+    if isinstance(model, SparserModel):
+        return (
+            "iVAE_s"
+            + str(model.latent_dim)
+            + "_elbo_"
+            + str(model.elbo_loss_alpha)
+            + f"_{model.regularization_loss.__class__.__name__}_{str(model.regularization_loss.alpha)}"
+            + "_dist_"
+            + str(model.distance_loss.alpha)
+            + "_aux_dim_"
+            + str(model.aux_dim)
+            + "_slope_"
+            + str(model.slope)
+            + desc
+        )
+    elif isinstance(model, Autoencoder):
+        return "autoencoder" + "_k_" + str(model.activation.k) + desc
+    else:
+        raise Exception(f"Unknown type for model: {model}")
 
 
-def build_encode_sparse_fun(tokenizer, model, threshold, zeroing_type="quantile"):
+def build_encode_sparse_fun(
+    config: Config, tokenizer, model, threshold, zeroing_type="quantile"
+):
     def encode_sparse_from_tokens(token_ids, token_mask):
         with torch.no_grad():
             z = model.encode(token_ids=token_ids, token_mask=token_mask)
             if threshold is not None:
                 if zeroing_type == "quantile":
-                    q = torch.quantile(z, torch.tensor([threshold, 1.0 - threshold]).to(DEVICE), dim=1, keepdim=True)
+                    q = torch.quantile(
+                        z,
+                        torch.tensor([threshold, 1.0 - threshold]).to(config.device),
+                        dim=1,
+                        keepdim=True,
+                    )
                     z = torch.where((z <= q[0]) | (z >= q[1]), z, 0.0)
                 elif zeroing_type == "threshold":
                     z[torch.abs(z) < threshold] = 0
@@ -28,13 +49,15 @@ def build_encode_sparse_fun(tokenizer, model, threshold, zeroing_type="quantile"
         return z
 
     def encode_sparse_from_docs(docs: list[str]):
-        tokenized = tokenizer(docs,
-                              return_tensors="pt",
-                              padding='max_length',
-                              truncation=True,
-                              max_length=MAX_LENGTH).to(DEVICE)
-        return encode_sparse_from_tokens(token_ids=tokenized["input_ids"], token_mask=tokenized["attention_mask"])
+        tokenized = tokenizer(
+            docs,
+            return_tensors="pt",
+            padding="max_length",
+            truncation=True,
+            max_length=config.max_length,
+        ).to(config.device)
+        return encode_sparse_from_tokens(
+            token_ids=tokenized["input_ids"], token_mask=tokenized["attention_mask"]
+        )
 
     return encode_sparse_from_docs if tokenizer else encode_sparse_from_tokens
-
-

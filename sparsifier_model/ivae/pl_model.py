@@ -5,84 +5,78 @@ import torch
 import wandb
 from transformers import AutoModel
 
+from common.pooling import mean_pooling
 from sparsifier_model.ivae.modules import Normal, MLP, weights_init
 from sparsifier_model.loss import DistanceLoss, FLOPS
-from sparsifier_model.params import (BACKBONE_MODEL_ID, LEARNING_RATE, ELBO_LOSS_ALPHA,
-                                     DIST_LOSS_ALPHA, REG_LOSS_ALPHA,
-                                     LOG_EVERY)
-from common.pooling import mean_pooling
+from sparsifier_model.config import (Config)
 
 
 class SparserModel(L.LightningModule):
     def __init__(self,
+                 config: Config,
                  embs_kmeans_centroids,
                  dataset_n, max_iter,
-                 latent_dim, hidden_dim=1000,
-
-                 elbo_loss_alpha=ELBO_LOSS_ALPHA,
-                 distance_loss_alpha=DIST_LOSS_ALPHA,
-                 regularization_loss_alpha=REG_LOSS_ALPHA,
 
                  prior=None, decoder=None, encoder=None,
 
                  decoder_var_coef=.01,
-
-                 n_layers=3, activation='lrelu', slope=.1,  # TODO: try slope=0.01
-
-                 device='cpu', learning_rate=LEARNING_RATE, anneal=False):
+                 # TODO: try slope=0.01
+                 n_layers=3, activation='lrelu', slope=.1):
 
         super().__init__()
         self.save_hyperparameters()
-        backbone = AutoModel.from_pretrained(BACKBONE_MODEL_ID).to(device)
+        backbone = AutoModel.from_pretrained(config.backbone_model_id).to(config.device)
         backbone.eval()
         for p in backbone.parameters():
             p.requires_grad = False
         self.backbone = backbone
 
         self.data_dim = self.backbone.config.hidden_size
-        self.latent_dim = latent_dim
+        self.latent_dim = config.latent_dim
         self.aux_dim = len(embs_kmeans_centroids)
-        self.hidden_dim = hidden_dim
+        self.hidden_dim = config.hidden_dim
         self.n_layers = n_layers
         self.activation = activation
         self.slope = slope
-        self.learning_rate = learning_rate
-        self.anneal_params = anneal
-        self.embs_kmeans_index = faiss.IndexFlatL2(embs_kmeans_centroids.shape[1]) # TODO: gpu version can be used
+        self.learning_rate = config.learning_rate
+        self.anneal_params = config.anneal
+        self.embs_kmeans_index = faiss.IndexFlatL2(embs_kmeans_centroids.shape[1])  # TODO: gpu version can be used
         self.embs_kmeans_index.add(embs_kmeans_centroids)
         self.dataset_n = dataset_n
         self.max_iter = max_iter
 
         if prior is None:
-            self.prior_dist = Normal(device=device)
+            self.prior_dist = Normal(device=config.device)
         else:
             self.prior_dist = prior
 
         if decoder is None:
-            self.decoder_dist = Normal(device=device)
+            self.decoder_dist = Normal(device=config.device)
         else:
             self.decoder_dist = decoder
 
         if encoder is None:
-            self.encoder_dist = Normal(device=device)
+            self.encoder_dist = Normal(device=config.device)
         else:
             self.encoder_dist = encoder
 
         # prior_params
-        self.prior_mean = torch.zeros(1).to(device)
-        self.logl = MLP(self.aux_dim, latent_dim, hidden_dim, n_layers, activation=activation, slope=slope, device=device)
+        self.prior_mean = torch.zeros(1).to(config.device)
+        self.logl = MLP(self.aux_dim, self.latent_dim, self.hidden_dim, n_layers, activation=activation, slope=slope,
+                        device=config.device)
         # decoder params
-        self.f = MLP(latent_dim, self.data_dim, hidden_dim, n_layers, activation=activation, slope=slope, device=device)
-        self.decoder_var = decoder_var_coef * torch.ones(1).to(device)
+        self.f = MLP(self.latent_dim, self.data_dim, self.hidden_dim, n_layers, activation=activation, slope=slope,
+                     device=config.device)
+        self.decoder_var = decoder_var_coef * torch.ones(1).to(config.device)
         # encoder params
-        self.g = MLP(self.data_dim + self.aux_dim, latent_dim, hidden_dim, n_layers, activation=activation, slope=slope,
-                     device=device)
-        self.logv = MLP(self.data_dim + self.aux_dim, latent_dim, hidden_dim, n_layers, activation=activation, slope=slope,
-                        device=device)
+        self.g = MLP(self.data_dim + self.aux_dim, self.latent_dim, self.hidden_dim, n_layers, activation=activation,
+                     slope=slope, device=config.device)
+        self.logv = MLP(self.data_dim + self.aux_dim, self.latent_dim, self.hidden_dim, n_layers, activation=activation,
+                        slope=slope, device=config.device)
         # losses
-        self.elbo_loss_alpha = elbo_loss_alpha
-        self.regularization_loss = FLOPS(alpha=regularization_loss_alpha)
-        self.distance_loss = DistanceLoss(alpha=distance_loss_alpha)
+        self.elbo_loss_alpha = config.elbo_loss_alpha
+        self.regularization_loss = FLOPS(alpha=config.reg_loss_alpha)
+        self.distance_loss = DistanceLoss(alpha=config.dist_loss_alpha)
 
         self.logl.apply(weights_init)
         self.f.apply(weights_init)
@@ -92,6 +86,7 @@ class SparserModel(L.LightningModule):
         self._training_hyperparams = [1., 1., 1., 1., 1]
         self.training_step_count = 0
         self.training_step_outputs = []
+        self.log_every = config.log_every
 
     def encode(self, token_ids, token_mask):
         x, u = self.__encode_to_x_and_u(token_ids=token_ids, token_mask=token_mask)
@@ -174,7 +169,7 @@ class SparserModel(L.LightningModule):
             "z_nonzero": z_nonzero,
         }
         self.training_step_outputs.append(outs)
-        if batch_idx % LOG_EVERY == 0:
+        if batch_idx % self.log_every == 0:
             wandb.log({'loss': loss})
             wandb.log({'elbo loss': elbo_loss.detach().clone()})
             wandb.log({'regularization loss': reg_loss.detach().clone()})
@@ -207,7 +202,7 @@ class SparserModel(L.LightningModule):
 
     def __encode_to_x_and_u(self, token_ids, token_mask):
         x = self.backbone(input_ids=token_ids, attention_mask=token_mask)
-        x = mean_pooling(model_output=x, attention_mask=token_mask) # TODO: try pool sparse embeddings
+        x = mean_pooling(model_output=x, attention_mask=token_mask)  # TODO: try pool sparse embeddings
         _, labels = self.embs_kmeans_index.search(x.cpu().detach().numpy(), 1)
         labels = torch.from_numpy(labels).squeeze(dim=-1).to(self.device)
         u = torch.nn.functional.one_hot(labels, num_classes=self.aux_dim).float()

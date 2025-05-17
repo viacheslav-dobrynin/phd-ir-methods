@@ -3,23 +3,19 @@ import pandas as pd
 from nltk.corpus import reuters
 from torch.utils.data import Dataset, DataLoader
 
-from sparsifier_model.params import MAX_LENGTH, EPOCHS
 from common.datasets import load_dataset
-
-nltk.download('stopwords')
-nltk.download('reuters')
-nltk.download('wordnet')
+from sparsifier_model.config import Config
 
 
 class DocDataset(Dataset):
-    def __init__(self, docs, tokenizer, max_length=MAX_LENGTH):
+    def __init__(self, config: Config, docs, tokenizer):
         super().__init__()
         self.docs_len = len(docs)
         self.tokenized_docs = tokenizer(docs,
                                         return_tensors="pt",
                                         padding='max_length',
                                         truncation=True,
-                                        max_length=max_length)
+                                        max_length=config.max_length)
 
     def __len__(self):
         return self.docs_len
@@ -29,6 +25,9 @@ class DocDataset(Dataset):
 
 
 def get_reuters_raw(num_doc=100):
+    nltk.download('stopwords')
+    nltk.download('reuters')
+    nltk.download('wordnet')
     file_list = reuters.fileids()
     if num_doc:
         corpus = [reuters.raw(file_list[i]) for i in range(num_doc)]
@@ -53,15 +52,15 @@ def get_corpus(dataset_name: str):
     return corpus
 
 
-def get_dataloader(tokenizer, dataset_name: str, batch_size: int):
-    corpus = get_corpus(dataset_name)
+def get_dataloader(config: Config, tokenizer):
+    corpus = get_corpus(config.dataset)
     # Create dataset and dataloader
-    dataset = DocDataset(corpus, tokenizer)
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    dataset = DocDataset(config, corpus, tokenizer)
+    dataloader = DataLoader(dataset, batch_size=config.batch_size, shuffle=True)
     del corpus
     # anneal params
     dataset_n = len(dataset)
-    max_iter = len(dataloader) * EPOCHS
+    max_iter = len(dataloader) * config.epochs
     print(f'{dataset_n=}')
     print(f'{max_iter=}')
     return dataloader, dataset_n, max_iter
