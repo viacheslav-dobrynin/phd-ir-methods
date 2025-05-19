@@ -8,14 +8,14 @@ import numpy as np
 import sklearn.cluster
 import torch
 import tqdm
-from beir.retrieval.evaluation import EvaluateRetrieval
 from torch.utils.data import Dataset, DataLoader
 from transformers import AutoTokenizer, AutoModel
 
-from spar_k_means_bert.in_memory_inverted_index import InMemoryInvertedIndex
-from spar_k_means_bert.lucene_index import LuceneIndex
 from common.datasets import load_dataset
 from common.encode_dense_fun_builder import build_encode_dense_fun
+from spar_k_means_bert.in_memory_inverted_index import InMemoryInvertedIndex
+from spar_k_means_bert.lucene_index import LuceneIndex
+from spar_k_means_bert.util.eval import eval_with_dot_score_function
 
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -212,9 +212,7 @@ if __name__ == '__main__':
     inverted_index = build_inverted_index()
     # Retrieval
     results = inverted_index.search(queries, query_tokens_calculator, args.search_top_k)
-    retriever = EvaluateRetrieval(score_function="dot")
-    ndcg, _map, recall, precision = retriever.evaluate(qrels, results, retriever.k_values)
-    mrr = retriever.evaluate_custom(qrels, results, retriever.k_values, metric="mrr")
+    ndcg, _map, recall, precision, mrr = eval_with_dot_score_function(qrels, results)
     print(ndcg, _map, recall, precision, mrr)
     with open("retrieval_results.txt", "a") as f:
         f.write(str(args))
