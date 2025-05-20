@@ -4,7 +4,7 @@ from beir import util
 from beir.datasets.data_loader import GenericDataLoader
 
 
-def load_dataset(dataset: str = None, split: str = "test", length: int = None):
+def load_dataset(dataset: str | None = None, split: str = "test", length: int | None = None):
     if not dataset:
         dataset = "scifact"
     if length:
