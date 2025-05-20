@@ -8,37 +8,17 @@ import numpy as np
 import sklearn.cluster
 import torch
 import tqdm
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import DataLoader
 from transformers import AutoTokenizer, AutoModel
 
 from common.datasets import load_dataset
 from common.encode_dense_fun_builder import build_encode_dense_fun
+from spar_k_means_bert.dataset import CorpusDataset
 from spar_k_means_bert.in_memory_inverted_index import InMemoryInvertedIndex
 from spar_k_means_bert.lucene_index import LuceneIndex
 from spar_k_means_bert.util.eval import eval_with_dot_score_function
 
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-
-class CorpusDataset(Dataset):
-
-    def __init__(self, corpus):
-        self.doc_ids = list(corpus.keys())
-        self.doc_id_to_idx = {doc_id: idx for idx, doc_id in enumerate(self.doc_ids)}
-        docs = list(corpus.values())
-        self.docs_len = len(docs)
-        self.tokenized_docs = tokenize(docs)
-
-    def __len__(self):
-        return self.docs_len
-
-    def __getitem__(self, item):
-        return self.doc_ids[item], self.tokenized_docs['input_ids'][item], self.tokenized_docs['attention_mask'][item]
-
-    def get_by_doc_id(self, doc_id, device="cpu"):
-        idx = self.doc_id_to_idx[doc_id]
-        return (self.tokenized_docs['input_ids'][idx].to(device).unsqueeze(0),
-                self.tokenized_docs['attention_mask'][idx].to(device).unsqueeze(0))
 
 
 def load_model():
@@ -194,7 +174,7 @@ if __name__ == '__main__':
     sep = " "
     corpus = {doc_id: (doc["title"] + sep + doc["text"]).strip() for doc_id, doc in corpus.items()}
     print(f"Corpus size={len(corpus)}, queries size={len(queries)}, qrels size={len(qrels)}")
-    dataset = CorpusDataset(corpus)
+    dataset = CorpusDataset(corpus=corpus, tokenize=tokenize)
     dataloader = DataLoader(dataset=dataset, batch_size=args.batch_size)
     model = load_model()
     encode_dense = build_encode_dense_fun(tokenizer=tokenizer, model=model, device=DEVICE)
