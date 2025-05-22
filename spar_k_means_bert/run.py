@@ -11,9 +11,8 @@ import tqdm
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer, AutoModel
 
-from common.datasets import load_dataset
 from common.encode_dense_fun_builder import build_encode_dense_fun
-from spar_k_means_bert.dataset import CorpusDataset
+from spar_k_means_bert.dataset import get_dataset
 from spar_k_means_bert.in_memory_inverted_index import InMemoryInvertedIndex
 from spar_k_means_bert.lucene_index import LuceneIndex
 from spar_k_means_bert.util.eval import eval_with_dot_score_function
@@ -170,11 +169,7 @@ if __name__ == '__main__':
     print(f"Params: {args}")
     # Data, tokenizer, model
     tokenizer = AutoTokenizer.from_pretrained(args.backbone_model_id, use_fast=True)
-    corpus, queries, qrels = load_dataset(dataset=args.dataset, length=args.dataset_length)
-    sep = " "
-    corpus = {doc_id: (doc["title"] + sep + doc["text"]).strip() for doc_id, doc in corpus.items()}
-    print(f"Corpus size={len(corpus)}, queries size={len(queries)}, qrels size={len(qrels)}")
-    dataset = CorpusDataset(corpus=corpus, tokenize=tokenize)
+    dataset, queries, qrels = get_dataset(tokenize=tokenize, dataset=args.dataset, length=args.dataset_length)
     dataloader = DataLoader(dataset=dataset, batch_size=args.batch_size)
     model = load_model()
     encode_dense = build_encode_dense_fun(tokenizer=tokenizer, model=model, device=DEVICE)
