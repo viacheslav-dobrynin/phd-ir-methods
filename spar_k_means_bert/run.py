@@ -9,13 +9,14 @@ import sklearn.cluster
 import torch
 import tqdm
 from torch.utils.data import DataLoader
-from transformers import AutoTokenizer, AutoModel
+from transformers import AutoTokenizer
 
 from common.encode_dense_fun_builder import build_encode_dense_fun
 from common.model import load_model
 from spar_k_means_bert.dataset import get_dataset
 from spar_k_means_bert.in_memory_inverted_index import InMemoryInvertedIndex
 from spar_k_means_bert.lucene_index import LuceneIndex
+from spar_k_means_bert.util.encode import encode_to_token_embs
 from spar_k_means_bert.util.eval import eval_with_dot_score_function
 
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -25,15 +26,6 @@ DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 def mean_pooling(token_embeddings, attention_mask):
     input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
     return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
-
-
-# Encode text
-def encode_to_token_embs(input_ids, attention_mask):
-    # Compute token embeddings
-    with torch.no_grad():
-        model_output = model(input_ids=input_ids, attention_mask=attention_mask, return_dict=True)
-
-    return model_output.last_hidden_state
 
 
 def tokenize(texts):
@@ -62,7 +54,7 @@ def build_token_to_doc_ids():
 def build_doc_id_to_embs():
     doc_id_to_embs = {}
     for doc_ids, token_ids_batch, attention_mask in tqdm.tqdm(iterable=dataloader, desc="encode_to_token_embs"):
-        embs = encode_to_token_embs(input_ids=token_ids_batch, attention_mask=attention_mask)
+        embs = encode_to_token_embs(model=model, input_ids=token_ids_batch, attention_mask=attention_mask)
         embs = embs.cpu()
         for idx, doc_id in enumerate(doc_ids):
             doc_id_to_embs[doc_id] = embs[idx].unsqueeze(0)
@@ -132,6 +124,7 @@ def build_inverted_index():
 def query_tokens_calculator(query):
     tokenized_query = tokenize(query)
     contextualized_embs = encode_to_token_embs(
+        model=model,
         input_ids=tokenized_query["input_ids"],
         attention_mask=tokenized_query["attention_mask"])
     contextualized_embs_np = contextualized_embs.squeeze(0).cpu().detach().numpy()
