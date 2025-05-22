@@ -1,10 +1,15 @@
 import os
+from typing import Dict, Tuple
 
 from beir import util
 from beir.datasets.data_loader import GenericDataLoader
 
 
-def load_dataset(dataset: str | None = None, split: str = "test", length: int | None = None):
+def load_dataset(
+        dataset: str | None = None,
+        split: str = "test",
+        length: int | None = None,
+) -> Tuple[Dict[str, Dict[str, str]], Dict[str, str], Dict[str, Dict[str, int]]]:
     if not dataset:
         dataset = "scifact"
     if length:
