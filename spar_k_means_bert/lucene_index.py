@@ -21,13 +21,13 @@ from common.path import delete_folder
 
 class LuceneIndex:
     def __init__(self, base_path: str, use_cache: bool, threshold: torch.tensor = None):
-        jcc_path = '/home/slava/IdeaProjects/sparsifier-model/tools/jcc'  # TODO: use var for this
+        jcc_path = f"{base_path}tools/jcc"
         if jcc_path not in sys.path:
             sys.path.append(jcc_path)
         try:
             lucene.initVM()
         except Exception as e:
-            print(f'Init error: {e}')
+            print(f"Init error: {e}")
         self.index_path = f"{base_path}runs/inverted_index"
         if not use_cache:
             delete_folder(self.index_path)
@@ -42,7 +42,12 @@ class LuceneIndex:
         doc.add(to_doc_id_field(doc_id))
         for token_and_cluster_id, score in zip(token_and_cluster_id_list, scores):
             if not self.threshold or score >= self.threshold:
-                doc.add(NumericDocValuesField(token_and_cluster_id, score.to(torch.float8_e4m3fn).view(dtype=torch.uint8).item()))
+                doc.add(
+                    NumericDocValuesField(
+                        token_and_cluster_id,
+                        score.to(torch.float8_e4m3fn).view(dtype=torch.uint8).item(),
+                    )
+                )
         self.writer.addDocument(doc)
 
     def complete_indexing(self):
@@ -69,7 +74,9 @@ class LuceneIndex:
         try:
             query_ids = list(queries.keys())
             for query_id in tqdm.tqdm(iterable=query_ids, desc="search"):
-                query = self.__build_query(token_and_cluster_id_calculator(queries[query_id]))
+                query = self.__build_query(
+                    token_and_cluster_id_calculator(queries[query_id])
+                )
                 hits = searcher.search(query, top_k).scoreDocs
                 stored_fields = searcher.storedFields()
                 query_result = {}

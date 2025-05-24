@@ -8,60 +8,24 @@ import numpy as np
 import sklearn.cluster
 import torch
 import tqdm
-from beir.retrieval.evaluation import EvaluateRetrieval
-from torch.utils.data import Dataset, DataLoader
-from transformers import AutoTokenizer, AutoModel
+from torch.utils.data import DataLoader
+from transformers import AutoTokenizer
 
+from common.encode_dense_fun_builder import build_encode_dense_fun
+from common.model import load_model
+from spar_k_means_bert.dataset import get_dataset
 from spar_k_means_bert.in_memory_inverted_index import InMemoryInvertedIndex
 from spar_k_means_bert.lucene_index import LuceneIndex
-from common.datasets import load_dataset
-from common.encode_dense_fun_builder import build_encode_dense_fun
+from spar_k_means_bert.util.encode import encode_to_token_embs
+from spar_k_means_bert.util.eval import eval_with_dot_score_function
 
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-
-class CorpusDataset(Dataset):
-
-    def __init__(self, corpus):
-        self.doc_ids = list(corpus.keys())
-        self.doc_id_to_idx = {doc_id: idx for idx, doc_id in enumerate(self.doc_ids)}
-        docs = list(corpus.values())
-        self.docs_len = len(docs)
-        self.tokenized_docs = tokenize(docs)
-
-    def __len__(self):
-        return self.docs_len
-
-    def __getitem__(self, item):
-        return self.doc_ids[item], self.tokenized_docs['input_ids'][item], self.tokenized_docs['attention_mask'][item]
-
-    def get_by_doc_id(self, doc_id, device="cpu"):
-        idx = self.doc_id_to_idx[doc_id]
-        return (self.tokenized_docs['input_ids'][idx].to(device).unsqueeze(0),
-                self.tokenized_docs['attention_mask'][idx].to(device).unsqueeze(0))
-
-
-def load_model():
-    model = AutoModel.from_pretrained(args.backbone_model_id).to(DEVICE)
-    model.eval()
-    for p in model.parameters():
-        p.requires_grad = False
-    return model
 
 
 # Mean Pooling - Take attention mask into account for correct averaging
 def mean_pooling(token_embeddings, attention_mask):
     input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
     return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
-
-
-# Encode text
-def encode_to_token_embs(input_ids, attention_mask):
-    # Compute token embeddings
-    with torch.no_grad():
-        model_output = model(input_ids=input_ids, attention_mask=attention_mask, return_dict=True)
-
-    return model_output.last_hidden_state
 
 
 def tokenize(texts):
@@ -90,7 +54,7 @@ def build_token_to_doc_ids():
 def build_doc_id_to_embs():
     doc_id_to_embs = {}
     for doc_ids, token_ids_batch, attention_mask in tqdm.tqdm(iterable=dataloader, desc="encode_to_token_embs"):
-        embs = encode_to_token_embs(input_ids=token_ids_batch, attention_mask=attention_mask)
+        embs = encode_to_token_embs(model=model, input_ids=token_ids_batch, attention_mask=attention_mask)
         embs = embs.cpu()
         for idx, doc_id in enumerate(doc_ids):
             doc_id_to_embs[doc_id] = embs[idx].unsqueeze(0)
@@ -160,6 +124,7 @@ def build_inverted_index():
 def query_tokens_calculator(query):
     tokenized_query = tokenize(query)
     contextualized_embs = encode_to_token_embs(
+        model=model,
         input_ids=tokenized_query["input_ids"],
         attention_mask=tokenized_query["attention_mask"])
     contextualized_embs_np = contextualized_embs.squeeze(0).cpu().detach().numpy()
@@ -190,13 +155,9 @@ if __name__ == '__main__':
     print(f"Params: {args}")
     # Data, tokenizer, model
     tokenizer = AutoTokenizer.from_pretrained(args.backbone_model_id, use_fast=True)
-    corpus, queries, qrels = load_dataset(dataset=args.dataset, length=args.dataset_length)
-    sep = " "
-    corpus = {doc_id: (doc["title"] + sep + doc["text"]).strip() for doc_id, doc in corpus.items()}
-    print(f"Corpus size={len(corpus)}, queries size={len(queries)}, qrels size={len(qrels)}")
-    dataset = CorpusDataset(corpus)
+    dataset, queries, qrels = get_dataset(tokenize=tokenize, dataset=args.dataset, length=args.dataset_length)
     dataloader = DataLoader(dataset=dataset, batch_size=args.batch_size)
-    model = load_model()
+    model = load_model(model_id=args.backbone_model_id, device=DEVICE)
     encode_dense = build_encode_dense_fun(tokenizer=tokenizer, model=model, device=DEVICE)
     threshold = 0.8 * encode_dense("She enjoys reading books in her free time.") @ encode_dense("In her leisure hours, she likes to read novels.").T
     threshold = threshold.squeeze(0).cpu()
@@ -212,9 +173,7 @@ if __name__ == '__main__':
     inverted_index = build_inverted_index()
     # Retrieval
     results = inverted_index.search(queries, query_tokens_calculator, args.search_top_k)
-    retriever = EvaluateRetrieval(score_function="dot")
-    ndcg, _map, recall, precision = retriever.evaluate(qrels, results, retriever.k_values)
-    mrr = retriever.evaluate_custom(qrels, results, retriever.k_values, metric="mrr")
+    ndcg, _map, recall, precision, mrr = eval_with_dot_score_function(qrels, results)
     print(ndcg, _map, recall, precision, mrr)
     with open("retrieval_results.txt", "a") as f:
         f.write(str(args))
