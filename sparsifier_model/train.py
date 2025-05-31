@@ -11,7 +11,7 @@ import wandb
 from transformers import AutoTokenizer, AutoModel
 
 from common.pooling import mean_pooling
-from config import Config, ModelType
+from sparsifier_model.config import Config, ModelType
 from sparsifier_model.ivae.pl_model import SparserModel
 from sparsifier_model.util.dataset import get_dataloader
 from sparsifier_model.util.model import create_model_name
