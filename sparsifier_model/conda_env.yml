@@ -10,7 +10,7 @@ dependencies:
   - pytorch
   - pytorch-lightning
   - transformers
-  - numpy
+  - numpy<2
   - nltk
   - pip:
       - wandb
