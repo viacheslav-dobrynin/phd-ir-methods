@@ -98,8 +98,8 @@ class Autoencoder(L.LightningModule):
         """
         x = self.backbone(input_ids=token_ids, attention_mask=token_mask)
         x = mean_pooling(model_output=x, attention_mask=token_mask)
-        x, info = self.preprocess(x)
-        return self.activation(self.encode_pre_act(x)), info
+        x, _ = self.preprocess(x)
+        return self.activation(self.encode_pre_act(x))
 
     def decode(
         self, latents: torch.Tensor, info: dict[str, Any] | None = None
