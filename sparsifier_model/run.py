@@ -21,7 +21,7 @@ from common.in_memory_index import InMemoryInvertedIndex
 class InMemoryIndexRunner:
     def __init__(self, encode_fun, dataset=None, docs_number=None):
         self.encode = encode_fun
-        self.index_path = "./runs/custom/inverted_index"
+        self.index_path = "./runs/sparsifier_model/in_memoty_inverted_index"
         corpus, self.queries, self.qrels = load_dataset(
             dataset=dataset, length=docs_number
         )
@@ -68,7 +68,7 @@ class LuceneRunner:
             print(f"Init error: {e}")
         self.encode = encode_fun
         self.analyzer = StandardAnalyzer()
-        self.index_path = "./runs/inverted_index"
+        self.index_path = "./runs/sparsifier_model/lucene_inverted_index"
         self.index_jpath = Paths.get(self.index_path)
         corpus, self.queries, self.qrels = load_dataset(
             dataset=dataset, length=docs_number
