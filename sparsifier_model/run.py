@@ -1,6 +1,7 @@
 import itertools
+import sys
 
-import lucene
+import tools.lucene as lucene
 import torch
 from java.nio.file import Paths
 from org.apache.lucene.analysis.standard import StandardAnalyzer
@@ -10,25 +11,32 @@ from org.apache.lucene.search import IndexSearcher
 from org.apache.lucene.store import FSDirectory
 from tqdm.autonotebook import trange
 
-from util.datasets import load_dataset
-from util.path import delete_folder
-from util.field import to_field_name, to_doc_id_field
-from util.search import build_query
-from util.in_memory_index import InMemoryInvertedIndex
+from common.datasets import load_dataset
+from common.path import delete_folder
+from common.field import to_field_name, to_doc_id_field
+from common.search import build_query
+from common.in_memory_index import InMemoryInvertedIndex
 
 
 class InMemoryIndexRunner:
     def __init__(self, encode_fun, dataset=None, docs_number=None):
         self.encode = encode_fun
         self.index_path = "./runs/custom/inverted_index"
-        corpus, self.queries, self.qrels = load_dataset(dataset=dataset, length=docs_number)
-        self.corpus = {doc_id: (doc["title"] + " " + doc["text"]).strip() for doc_id, doc in corpus.items()}
+        corpus, self.queries, self.qrels = load_dataset(
+            dataset=dataset, length=docs_number
+        )
+        self.corpus = {
+            doc_id: (doc["title"] + " " + doc["text"]).strip()
+            for doc_id, doc in corpus.items()
+        }
         self.inverted_index = InMemoryInvertedIndex()
 
     def index(self, batch_size=300):
         corpus_items = self.corpus.items()
         for start_idx in trange(0, len(self.corpus), batch_size, desc="docs"):
-            batch = tuple(itertools.islice(corpus_items, start_idx, start_idx + batch_size))
+            batch = tuple(
+                itertools.islice(corpus_items, start_idx, start_idx + batch_size)
+            )
             doc_ids, docs = list(zip(*batch))
             emb_batch = self.encode(docs)
             for i in range(len(emb_batch)):
@@ -51,16 +59,24 @@ class InMemoryIndexRunner:
 
 class LuceneRunner:
     def __init__(self, encode_fun, dataset=None, docs_number=None):
+        jcc_path = f"./tools/jcc"
+        if jcc_path not in sys.path:
+            sys.path.append(jcc_path)
         try:
             lucene.initVM()
-        except ValueError as e:
-            print(f'Init error: {e}')
+        except Exception as e:
+            print(f"Init error: {e}")
         self.encode = encode_fun
         self.analyzer = StandardAnalyzer()
         self.index_path = "./runs/inverted_index"
         self.index_jpath = Paths.get(self.index_path)
-        corpus, self.queries, self.qrels = load_dataset(dataset=dataset, length=docs_number)
-        self.corpus = {doc_id: (doc["title"] + " " + doc["text"]).strip() for doc_id, doc in corpus.items()}
+        corpus, self.queries, self.qrels = load_dataset(
+            dataset=dataset, length=docs_number
+        )
+        self.corpus = {
+            doc_id: (doc["title"] + " " + doc["text"]).strip()
+            for doc_id, doc in corpus.items()
+        }
 
     def index(self, batch_size=300):
         config = IndexWriterConfig(self.analyzer)
@@ -69,7 +85,9 @@ class LuceneRunner:
         try:
             corpus_items = self.corpus.items()
             for start_idx in trange(0, len(self.corpus), batch_size, desc="docs"):
-                batch = tuple(itertools.islice(corpus_items, start_idx, start_idx + batch_size))
+                batch = tuple(
+                    itertools.islice(corpus_items, start_idx, start_idx + batch_size)
+                )
                 doc_ids, docs = list(zip(*batch))
                 emb_batch = self.encode(docs)
                 doc, prev_batch_idx = Document(), None
@@ -78,7 +96,12 @@ class LuceneRunner:
                         doc.add(to_doc_id_field(doc_ids[prev_batch_idx]))
                         writer.addDocument(doc)
                         doc = Document()
-                    doc.add(FloatDocValuesField(to_field_name(term.item()), emb_batch[batch_idx, term].item()))
+                    doc.add(
+                        FloatDocValuesField(
+                            to_field_name(term.item()),
+                            emb_batch[batch_idx, term].item(),
+                        )
+                    )
                     prev_batch_idx = batch_idx
                 doc.add(to_doc_id_field(doc_ids[prev_batch_idx]))
                 writer.addDocument(doc)
@@ -109,8 +132,12 @@ class LuceneRunner:
         delete_folder(self.index_path)
 
 
-if __name__ == '__main__':
-    runner = LuceneRunner(encode_fun=lambda docs: torch.tensor([[12.0, .0, 15.0], [.0, 4.0, .0], [20.0, 30.5, .0]]))
+if __name__ == "__main__":
+    runner = LuceneRunner(
+        encode_fun=lambda docs: torch.tensor(
+            [[12.0, 0.0, 15.0], [0.0, 4.0, 0.0], [20.0, 30.5, 0.0]]
+        )
+    )
     runner.delete_index()
     runner.index()
     search_results = runner.search()
