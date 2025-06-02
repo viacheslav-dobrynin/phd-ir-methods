@@ -52,7 +52,8 @@ class Autoencoder(L.LightningModule):
             self.decoder = nn.Linear(config.latent_dim, n_inputs, bias=False)
         self.normalize = normalize
         self.learning_rate = config.learning_rate
-        self.distance_loss = DistanceLoss(alpha=1)
+        self.mse_loss_alpha = config.k_sparse_mse_loss_alpha
+        self.distance_loss = DistanceLoss(alpha=config.k_sparse_dist_loss_alpha)
         self.training_step_outputs = []
         self.log_every = config.log_every
 
@@ -139,7 +140,7 @@ class Autoencoder(L.LightningModule):
         x = self.backbone(input_ids=token_ids, attention_mask=token_mask)
         x = mean_pooling(model_output=x, attention_mask=token_mask)
         latents_pre_act, latents, recons = self.forward(x)
-        mse_loss = F.mse_loss(input=recons, target=x)
+        mse_loss = self.mse_loss_alpha * F.mse_loss(input=recons, target=x)
 
         # reg_loss = self.regularization_loss(z)
         dist_loss = self.distance_loss(x, latents)
