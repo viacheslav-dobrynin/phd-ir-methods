@@ -28,7 +28,7 @@ class LuceneIndex:
             lucene.initVM()
         except Exception as e:
             print(f"Init error: {e}")
-        self.index_path = f"{base_path}runs/inverted_index"
+        self.index_path = f"{base_path}runs/spar_k_means_bert/lucene_inverted_index"
         if not use_cache:
             delete_folder(self.index_path)
         self.index_jpath = Paths.get(self.index_path)
