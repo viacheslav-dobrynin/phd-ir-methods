@@ -1,6 +1,10 @@
+import time
 import itertools
 import sys
+from transformers import AutoTokenizer
+import wandb
 
+from spar_k_means_bert.util.eval import eval_with_dot_score_function
 import tools.lucene as lucene
 import torch
 from java.nio.file import Paths
@@ -16,6 +20,9 @@ from common.path import delete_folder
 from common.field import to_field_name, to_doc_id_field
 from common.search import build_query
 from common.in_memory_index import InMemoryInvertedIndex
+from sparsifier_model.config import Config, ModelType
+from sparsifier_model.k_sparse.model import Autoencoder
+from sparsifier_model.util.model import build_encode_sparse_fun
 
 
 class InMemoryIndexRunner:
@@ -133,12 +140,44 @@ class LuceneRunner:
 
 
 if __name__ == "__main__":
-    runner = LuceneRunner(
-        encode_fun=lambda docs: torch.tensor(
-            [[12.0, 0.0, 15.0], [0.0, 4.0, 0.0], [20.0, 30.5, 0.0]]
-        )
+    config = Config(model_type=ModelType.K_SPARSE, dataset="msmarco_300000")
+    print("Device:", config.device, torch.cuda.is_available())
+    print("Torch:", torch.__version__)
+
+    wandb_model_name = "model-hzq51uqh:v0"
+    run = wandb.init()
+    artifact = run.use_artifact(
+        f"vector-search/{config.project}/{wandb_model_name}", type="model"
     )
+    artifact_dir = artifact.download()
+    model = Autoencoder.load_from_checkpoint(
+        f"artifacts/{wandb_model_name}/model.ckpt"
+    ).to(config.device)
+    tokenizer = AutoTokenizer.from_pretrained(config.backbone_model_id, use_fast=True)
+    model.eval()
+    model.freeze()
+    model.backbone.eval()
+    for p in model.backbone.parameters():
+        p.requires_grad = False
+    encode_sparse_from_docs = build_encode_sparse_fun(
+        config=config, tokenizer=tokenizer, model=model, threshold=None
+    )
+    print(encode_sparse_from_docs("test").shape)
+    print("Number of nonzero", torch.count_nonzero(encode_sparse_from_docs("test")))
+
+    runner = LuceneRunner(encode_fun=encode_sparse_from_docs)
     runner.delete_index()
-    runner.index()
-    search_results = runner.search()
-    print(f"{search_results=}")
+    runner.index(batch_size=200)
+
+    start = time.time()
+    search_results = runner.search(top_k=1000)
+    print("Search time:", time.time() - start)
+
+    ndcg, _map, recall, precision, mrr = eval_with_dot_score_function(
+        qrels=runner.qrels, results=search_results
+    )
+    print(ndcg, _map, recall, precision, mrr)
+    start = time.time()
+    runner.queries = {1: "Some test query"}
+    runner.search()
+    print("Query time:", time.time() - start)
