@@ -148,13 +148,13 @@ class Autoencoder(L.LightningModule):
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
         outs = {
             "loss": loss,
-            # "reg_loss": reg_loss,
+            "mse_loss": mse_loss,
             "dist_loss": dist_loss,
         }
         self.training_step_outputs.append(outs)
         if batch_idx % self.log_every == 0:
             wandb.log({"loss": loss})
-            # wandb.log({'regularization loss': reg_loss.detach().clone()})
+            wandb.log({"mse loss": mse_loss.detach().clone()})
             wandb.log({"distance loss": dist_loss.detach().clone()})
 
         return loss
@@ -162,14 +162,13 @@ class Autoencoder(L.LightningModule):
     def on_train_epoch_end(self):
         outs = self.training_step_outputs
         loss = torch.stack([out["loss"] for out in outs]).mean()
-        # reg_loss = torch.stack([out['reg_loss'] for out in outs]).mean()
+        mse_loss = torch.stack([out["mse_loss"] for out in outs]).mean()
         dist_loss = torch.stack([out["dist_loss"] for out in outs]).mean()
 
         print(
-            f"loss = {loss:.2f}: "
-            +
-            # f"regularization loss = {reg_loss:.2f}, " +
-            f"distance loss = {dist_loss:.2f}"
+            f"loss = {loss:.4f}: "
+            + f"mse loss = {mse_loss:.4f}, "
+            + f"distance loss = {dist_loss:.4f}"
         )
         self.training_step_outputs.clear()
 
