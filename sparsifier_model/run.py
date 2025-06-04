@@ -80,6 +80,9 @@ class LuceneRunner:
         corpus, self.queries, self.qrels = load_dataset(
             dataset=dataset, length=docs_number
         )
+        print(
+            f"Corpus size={len(corpus)}, queries size={len(self.queries)}, qrels size={len(self.qrels)}"
+        )
         self.corpus = {
             doc_id: (doc["title"] + " " + doc["text"]).strip()
             for doc_id, doc in corpus.items()
@@ -113,7 +116,18 @@ class LuceneRunner:
                 doc.add(to_doc_id_field(doc_ids[prev_batch_idx]))
                 writer.addDocument(doc)
         finally:
+            writer.forceMerge(1, True)
+            writer.commit()
             writer.close()
+
+    def size(self):
+        try:
+            reader = DirectoryReader.open(FSDirectory.open(self.index_jpath))
+            num_docs = reader.numDocs()
+            reader.close()
+            return num_docs
+        except:
+            return 0
 
     def search(self, top_k=10):
         reader = DirectoryReader.open(FSDirectory.open(self.index_jpath))
@@ -165,9 +179,12 @@ if __name__ == "__main__":
     print(encode_sparse_from_docs("test").shape)
     print("Number of nonzero", torch.count_nonzero(encode_sparse_from_docs("test")))
 
-    runner = LuceneRunner(encode_fun=encode_sparse_from_docs)
+    runner = LuceneRunner(
+        encode_fun=encode_sparse_from_docs, dataset="msmarco", docs_number=50_000
+    )
     runner.delete_index()
-    runner.index(batch_size=200)
+    runner.index(batch_size=128)
+    print("Inverted index size:", runner.size())
 
     start = time.time()
     search_results = runner.search(top_k=1000)

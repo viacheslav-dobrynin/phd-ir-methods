@@ -7,6 +7,7 @@ from transformers import AutoTokenizer
 from common.datasets import load_dataset
 from common.encode_dense_fun_builder import build_encode_dense_fun
 from common.model import load_model
+from common.path import delete_folder
 from spar_k_means_bert.util.eval import eval_with_dot_score_function
 import tools.lucene as lucene
 
@@ -38,29 +39,32 @@ except Exception as e:
 
 analyzer = StandardAnalyzer()
 index_path = "./runs/common/lucene_hnsw_index"
+delete_folder(index_path)
 index_jpath = Paths.get(index_path)
 config = IndexWriterConfig(analyzer)
 writer = IndexWriter(FSDirectory.open(index_jpath), config)
 
-corpus, queries, qrels = load_dataset()
+corpus, queries, qrels = load_dataset(dataset="msmarco", length=100_000)
+print(
+    f"Corpus size={len(corpus)}, queries size={len(queries)}, qrels size={len(qrels)}"
+)
+
+sep = " "
+for doc_id, doc in tqdm.tqdm(iterable=corpus.items(), desc="build_hnsw"):
+    doc = (doc["title"] + sep + doc["text"]).strip()
+    doc_emb = encode_dense(doc).cpu()[0].tolist()
+    lucene_document = Document()
+    lucene_document.add(StringField("doc_id", doc_id, Field.Store.YES))
+    lucene_document.add(
+        KnnFloatVectorField("vector", doc_emb, VectorSimilarityFunction.DOT_PRODUCT)
+    )
+    writer.addDocument(lucene_document)
+writer.close()
 
 start = time.time()
 reader = DirectoryReader.open(FSDirectory.open(index_jpath))
 num_docs = reader.numDocs()
 print("HNSW index size:", num_docs)
-if num_docs == 0:
-    sep = " "
-    for doc_id, doc in tqdm.tqdm(iterable=corpus.items(), desc="build_hnsw"):
-        doc = (doc["title"] + sep + doc["text"]).strip()
-        doc_emb = encode_dense(doc).cpu()[0].tolist()
-        lucene_document = Document()
-        lucene_document.add(StringField("doc_id", doc_id, Field.Store.YES))
-        lucene_document.add(
-            KnnFloatVectorField("vector", doc_emb, VectorSimilarityFunction.DOT_PRODUCT)
-        )
-        writer.addDocument(lucene_document)
-    writer.close()
-
 searcher = IndexSearcher(reader)
 results = {}
 top_k = 1000
