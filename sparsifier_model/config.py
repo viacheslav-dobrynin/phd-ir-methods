@@ -30,6 +30,8 @@ class Config:
     elbo_loss_alpha: float = 0.0001
     reg_loss_alpha: float = 5
     dist_loss_alpha: float = 30_000
+    k_sparse_mse_loss_alpha: float = 1
+    k_sparse_dist_loss_alpha: float = 1
     learning_rate: float = 1e-4
     log_every: int = 20
     num_clusters: int = 25  # for k-means

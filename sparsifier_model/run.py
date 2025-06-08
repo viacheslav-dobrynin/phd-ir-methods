@@ -1,6 +1,11 @@
+import time
 import itertools
+import sys
+from transformers import AutoTokenizer
+import wandb
 
-import lucene
+from spar_k_means_bert.util.eval import eval_with_dot_score_function
+import tools.lucene as lucene
 import torch
 from java.nio.file import Paths
 from org.apache.lucene.analysis.standard import StandardAnalyzer
@@ -10,25 +15,35 @@ from org.apache.lucene.search import IndexSearcher
 from org.apache.lucene.store import FSDirectory
 from tqdm.autonotebook import trange
 
-from util.datasets import load_dataset
-from util.path import delete_folder
-from util.field import to_field_name, to_doc_id_field
-from util.search import build_query
-from util.in_memory_index import InMemoryInvertedIndex
+from common.datasets import load_dataset
+from common.path import delete_folder
+from common.field import to_field_name, to_doc_id_field
+from common.search import build_query
+from common.in_memory_index import InMemoryInvertedIndex
+from sparsifier_model.config import Config, ModelType
+from sparsifier_model.k_sparse.model import Autoencoder
+from sparsifier_model.util.model import build_encode_sparse_fun
 
 
 class InMemoryIndexRunner:
     def __init__(self, encode_fun, dataset=None, docs_number=None):
         self.encode = encode_fun
-        self.index_path = "./runs/custom/inverted_index"
-        corpus, self.queries, self.qrels = load_dataset(dataset=dataset, length=docs_number)
-        self.corpus = {doc_id: (doc["title"] + " " + doc["text"]).strip() for doc_id, doc in corpus.items()}
+        self.index_path = "./runs/sparsifier_model/in_memoty_inverted_index"
+        corpus, self.queries, self.qrels = load_dataset(
+            dataset=dataset, length=docs_number
+        )
+        self.corpus = {
+            doc_id: (doc["title"] + " " + doc["text"]).strip()
+            for doc_id, doc in corpus.items()
+        }
         self.inverted_index = InMemoryInvertedIndex()
 
     def index(self, batch_size=300):
         corpus_items = self.corpus.items()
         for start_idx in trange(0, len(self.corpus), batch_size, desc="docs"):
-            batch = tuple(itertools.islice(corpus_items, start_idx, start_idx + batch_size))
+            batch = tuple(
+                itertools.islice(corpus_items, start_idx, start_idx + batch_size)
+            )
             doc_ids, docs = list(zip(*batch))
             emb_batch = self.encode(docs)
             for i in range(len(emb_batch)):
@@ -51,16 +66,27 @@ class InMemoryIndexRunner:
 
 class LuceneRunner:
     def __init__(self, encode_fun, dataset=None, docs_number=None):
+        jcc_path = f"./tools/jcc"
+        if jcc_path not in sys.path:
+            sys.path.append(jcc_path)
         try:
             lucene.initVM()
-        except ValueError as e:
-            print(f'Init error: {e}')
+        except Exception as e:
+            print(f"Init error: {e}")
         self.encode = encode_fun
         self.analyzer = StandardAnalyzer()
-        self.index_path = "./runs/inverted_index"
+        self.index_path = "./runs/sparsifier_model/lucene_inverted_index"
         self.index_jpath = Paths.get(self.index_path)
-        corpus, self.queries, self.qrels = load_dataset(dataset=dataset, length=docs_number)
-        self.corpus = {doc_id: (doc["title"] + " " + doc["text"]).strip() for doc_id, doc in corpus.items()}
+        corpus, self.queries, self.qrels = load_dataset(
+            dataset=dataset, length=docs_number
+        )
+        print(
+            f"Corpus size={len(corpus)}, queries size={len(self.queries)}, qrels size={len(self.qrels)}"
+        )
+        self.corpus = {
+            doc_id: (doc["title"] + " " + doc["text"]).strip()
+            for doc_id, doc in corpus.items()
+        }
 
     def index(self, batch_size=300):
         config = IndexWriterConfig(self.analyzer)
@@ -69,7 +95,9 @@ class LuceneRunner:
         try:
             corpus_items = self.corpus.items()
             for start_idx in trange(0, len(self.corpus), batch_size, desc="docs"):
-                batch = tuple(itertools.islice(corpus_items, start_idx, start_idx + batch_size))
+                batch = tuple(
+                    itertools.islice(corpus_items, start_idx, start_idx + batch_size)
+                )
                 doc_ids, docs = list(zip(*batch))
                 emb_batch = self.encode(docs)
                 doc, prev_batch_idx = Document(), None
@@ -78,12 +106,28 @@ class LuceneRunner:
                         doc.add(to_doc_id_field(doc_ids[prev_batch_idx]))
                         writer.addDocument(doc)
                         doc = Document()
-                    doc.add(FloatDocValuesField(to_field_name(term.item()), emb_batch[batch_idx, term].item()))
+                    doc.add(
+                        FloatDocValuesField(
+                            to_field_name(term.item()),
+                            emb_batch[batch_idx, term].item(),
+                        )
+                    )
                     prev_batch_idx = batch_idx
                 doc.add(to_doc_id_field(doc_ids[prev_batch_idx]))
                 writer.addDocument(doc)
         finally:
+            writer.forceMerge(1, True)
+            writer.commit()
             writer.close()
+
+    def size(self):
+        try:
+            reader = DirectoryReader.open(FSDirectory.open(self.index_jpath))
+            num_docs = reader.numDocs()
+            reader.close()
+            return num_docs
+        except:
+            return 0
 
     def search(self, top_k=10):
         reader = DirectoryReader.open(FSDirectory.open(self.index_jpath))
@@ -109,9 +153,48 @@ class LuceneRunner:
         delete_folder(self.index_path)
 
 
-if __name__ == '__main__':
-    runner = LuceneRunner(encode_fun=lambda docs: torch.tensor([[12.0, .0, 15.0], [.0, 4.0, .0], [20.0, 30.5, .0]]))
+if __name__ == "__main__":
+    config = Config(model_type=ModelType.K_SPARSE, dataset="msmarco_300000")
+    print("Device:", config.device, torch.cuda.is_available())
+    print("Torch:", torch.__version__)
+
+    wandb_model_name = "model-hzq51uqh:v0"
+    run = wandb.init()
+    artifact = run.use_artifact(
+        f"vector-search/{config.project}/{wandb_model_name}", type="model"
+    )
+    artifact_dir = artifact.download()
+    model = Autoencoder.load_from_checkpoint(
+        f"artifacts/{wandb_model_name}/model.ckpt"
+    ).to(config.device)
+    tokenizer = AutoTokenizer.from_pretrained(config.backbone_model_id, use_fast=True)
+    model.eval()
+    model.freeze()
+    model.backbone.eval()
+    for p in model.backbone.parameters():
+        p.requires_grad = False
+    encode_sparse_from_docs = build_encode_sparse_fun(
+        config=config, tokenizer=tokenizer, model=model, threshold=None
+    )
+    print(encode_sparse_from_docs("test").shape)
+    print("Number of nonzero", torch.count_nonzero(encode_sparse_from_docs("test")))
+
+    runner = LuceneRunner(
+        encode_fun=encode_sparse_from_docs, dataset="msmarco", docs_number=50_000
+    )
     runner.delete_index()
-    runner.index()
-    search_results = runner.search()
-    print(f"{search_results=}")
+    runner.index(batch_size=128)
+    print("Inverted index size:", runner.size())
+
+    start = time.time()
+    search_results = runner.search(top_k=1000)
+    print("Search time:", time.time() - start)
+
+    ndcg, _map, recall, precision, mrr = eval_with_dot_score_function(
+        qrels=runner.qrels, results=search_results
+    )
+    print(ndcg, _map, recall, precision, mrr)
+    start = time.time()
+    runner.queries = {1: "Some test query"}
+    runner.search()
+    print("Query time:", time.time() - start)
