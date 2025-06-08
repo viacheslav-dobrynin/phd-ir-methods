@@ -1,6 +1,7 @@
 import argparse
 import os
 import pickle
+import time
 from collections import defaultdict
 
 import faiss
@@ -172,7 +173,9 @@ if __name__ == '__main__':
     hnsw_index.hnsw.efSearch = args.hnsw_ef_search
     inverted_index = build_inverted_index()
     # Retrieval
+    start = time.time()
     results = inverted_index.search(queries, query_tokens_calculator, args.search_top_k)
+    print("Search time:", time.time() - start)
     ndcg, _map, recall, precision, mrr = eval_with_dot_score_function(qrels, results)
     print(ndcg, _map, recall, precision, mrr)
     with open("retrieval_results.txt", "a") as f:
