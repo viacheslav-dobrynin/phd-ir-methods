@@ -17,3 +17,6 @@ tools/jcc/
 tools/lucene/
 runs/
 datasets/
+# Wandb
+artifacts
+wandb/
