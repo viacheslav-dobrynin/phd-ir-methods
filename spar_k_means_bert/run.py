@@ -33,7 +33,7 @@ def tokenize(texts):
     return tokenizer(texts, padding=True, truncation=True, return_tensors='pt').to(DEVICE)
 
 
-def get_contextualized_embs(token, doc_id):
+def get_contextualized_embs(doc_id_to_embs, token, doc_id):
     input_ids, _ = dataset.get_by_doc_id(doc_id)
     embs = doc_id_to_embs[doc_id]
     idxs = torch.nonzero(input_ids == token, as_tuple=True)
@@ -76,6 +76,7 @@ def build_hnsw_index():
         os.remove(faiss_idx_to_token_file_name)
 
     token_to_doc_ids = build_token_to_doc_ids()
+    doc_id_to_embs = build_doc_id_to_embs()
     hnsw_index = faiss.IndexHNSWFlat(model.config.hidden_size, args.hnsw_M)
     hnsw_index.hnsw.efConstruction = args.hnsw_ef_construction
     faiss_idx_to_token = {}
@@ -83,7 +84,7 @@ def build_hnsw_index():
     for token, doc_ids in tqdm.tqdm(iterable=token_to_doc_ids.items(), desc="build_hnsw"):
         emb_batches = []
         for doc_id in doc_ids:
-            emb_batch = get_contextualized_embs(token, doc_id)
+            emb_batch = get_contextualized_embs(doc_id_to_embs, token, doc_id)
             emb_batches.append(emb_batch.cpu().detach().numpy())
         embs = np.concatenate(emb_batches)
         kmeans = sklearn.cluster.KMeans(
@@ -109,15 +110,18 @@ def build_inverted_index():
         inverted_index = LuceneIndex(args.base_path, args.use_cache, threshold)
     if inverted_index.size():
         return inverted_index
-    for doc_id, contextualized_embs in tqdm.tqdm(iterable=doc_id_to_embs.items(), desc="build_inverted_index"):
-        contextualized_embs = contextualized_embs.squeeze(0)
-        _, I = hnsw_index.search(contextualized_embs, args.index_n_neighbors)
-        assert len(I) == len(contextualized_embs)
-        faiss_ids = np.unique(I.flatten())  # this help to remove token repetition
-        token_and_cluster_id_list = [faiss_idx_to_token[id] for id in faiss_ids]
-        centroids = torch.from_numpy(hnsw_index.reconstruct_batch(faiss_ids))
-        scores = torch.max(contextualized_embs @ centroids.T, dim=0).values  # MaxSim
-        inverted_index.index(doc_id, token_and_cluster_id_list, scores)
+    for doc_ids, token_ids_batch, attention_mask in tqdm.tqdm(iterable=dataloader, desc="build_inverted_index"):
+        embs = encode_to_token_embs(model=model, input_ids=token_ids_batch, attention_mask=attention_mask)
+        embs = embs.cpu()
+        for idx, doc_id in enumerate(doc_ids):
+            contextualized_embs = embs[idx]
+            _, I = hnsw_index.search(contextualized_embs, args.index_n_neighbors)
+            assert len(I) == len(contextualized_embs)
+            faiss_ids = np.unique(I.flatten())  # this help to remove token repetition
+            token_and_cluster_id_list = [faiss_idx_to_token[id] for id in faiss_ids]
+            centroids = torch.from_numpy(hnsw_index.reconstruct_batch(faiss_ids))
+            scores = torch.max(contextualized_embs @ centroids.T, dim=0).values  # MaxSim
+            inverted_index.index(doc_id, token_and_cluster_id_list, scores)
     inverted_index.complete_indexing()
     return inverted_index
 
@@ -164,7 +168,6 @@ if __name__ == '__main__':
     threshold = threshold.squeeze(0).cpu()
     print(f"Dense similarity threshold: {threshold}")
     # Indexing
-    doc_id_to_embs = build_doc_id_to_embs()
     hnsw_index, faiss_idx_to_token = build_hnsw_index()
     print("HNSW index size: ", hnsw_index.ntotal)
     if args.train_hnsw_only:
