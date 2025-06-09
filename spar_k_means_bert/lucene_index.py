@@ -1,3 +1,4 @@
+import collections
 import sys
 import torch
 import tqdm
@@ -36,21 +37,37 @@ class LuceneIndex:
         self.writer = IndexWriter(FSDirectory.open(self.index_jpath), config)
         self.threshold = threshold
 
+        self.token_to_doc_ids = collections.defaultdict(set)
+        self.doc_id_and_fields = []
+
     def index(self, doc_id: int, token_and_cluster_id_list: list, scores: torch.tensor):
         assert len(token_and_cluster_id_list) == len(scores)
-        doc = Document()
-        doc.add(to_doc_id_field(doc_id))
+        fields = []
         for token_and_cluster_id, score in zip(token_and_cluster_id_list, scores):
             if not self.threshold or score >= self.threshold:
-                doc.add(
-                    NumericDocValuesField(
+                fields.append(
+                    (
                         token_and_cluster_id,
                         score.to(torch.float8_e4m3fn).view(dtype=torch.uint8).item(),
                     )
                 )
-        self.writer.addDocument(doc)
+                self.token_to_doc_ids[token_and_cluster_id].add(doc_id)
+        self.doc_id_and_fields.append((doc_id, fields))
 
     def complete_indexing(self):
+        stopwords = set()
+        docs_number = len(self.doc_id_and_fields)
+        for token, doc_ids in self.token_to_doc_ids.items():
+            if len(doc_ids) >= 0.005 * docs_number:
+                stopwords.add(token)
+        print(f"{len(stopwords)=}")
+        for doc_id, fields in self.doc_id_and_fields:
+            doc = Document()
+            doc.add(to_doc_id_field(doc_id))
+            for token_and_cluster_id, score in fields:
+                if token_and_cluster_id not in stopwords:
+                    doc.add(NumericDocValuesField(token_and_cluster_id, score))
+            self.writer.addDocument(doc)
         self.writer.forceMerge(1, True)
         self.writer.commit()
 
