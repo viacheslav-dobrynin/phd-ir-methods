@@ -88,6 +88,7 @@ print("HNSW index size:", num_docs)
 def search(query, top_k):
     query_emb = encode_dense(query).cpu()[0].tolist()
     query = KnnFloatVectorQuery("vector", query_emb, top_k)
+    start_query = time.time()
     hits = searcher.search(query, top_k).scoreDocs
     stored_fields = searcher.storedFields()
     query_result = {}
