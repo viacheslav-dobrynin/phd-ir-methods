@@ -158,7 +158,7 @@ if __name__ == "__main__":
     print("Device:", config.device, torch.cuda.is_available())
     print("Torch:", torch.__version__)
 
-    wandb_model_name = "model-hzq51uqh:v0"
+    wandb_model_name = "model-e78jsd1t:v0"
     run = wandb.init()
     artifact = run.use_artifact(
         f"vector-search/{config.project}/{wandb_model_name}", type="model"
@@ -180,7 +180,7 @@ if __name__ == "__main__":
     print("Number of nonzero", torch.count_nonzero(encode_sparse_from_docs("test")))
 
     runner = LuceneRunner(
-        encode_fun=encode_sparse_from_docs, dataset="msmarco", docs_number=50_000
+        encode_fun=encode_sparse_from_docs, dataset="msmarco", docs_number=100_000
     )
     runner.delete_index()
     runner.index(batch_size=128)

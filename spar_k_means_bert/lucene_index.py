@@ -58,7 +58,7 @@ class LuceneIndex:
         stopwords = set()
         docs_number = len(self.doc_id_and_fields)
         for token, doc_ids in self.token_to_doc_ids.items():
-            if len(doc_ids) >= 0.005 * docs_number:
+            if len(doc_ids) >= 0.001 * docs_number:
                 stopwords.add(token)
         print(f"{len(stopwords)=}")
         for doc_id, fields in self.doc_id_and_fields:
@@ -87,13 +87,16 @@ class LuceneIndex:
         reader = DirectoryReader.open(FSDirectory.open(self.index_jpath))
         searcher = IndexSearcher(reader)
         results = {}
+        import time
 
+        total_time = 0
         try:
             query_ids = list(queries.keys())
             for query_id in tqdm.tqdm(iterable=query_ids, desc="search"):
                 query = self.__build_query(
                     token_and_cluster_id_calculator(queries[query_id])
                 )
+                start = time.time()
                 hits = searcher.search(query, top_k).scoreDocs
                 stored_fields = searcher.storedFields()
                 query_result = {}
@@ -101,8 +104,10 @@ class LuceneIndex:
                     hit_doc = stored_fields.document(hit.doc)
                     query_result[hit_doc["doc_id"]] = hit.score
                 results[query_id] = query_result
+                total_time += time.time() - start
         finally:
             reader.close()
+        print("Search time without encoding:", total_time)
         return results
 
     def __build_query(self, token_and_cluster_id_list):
