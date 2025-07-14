@@ -23,7 +23,7 @@ from org.apache.lucene.index import (
 from java.nio.file import Paths
 from org.apache.lucene.document import Document, KnnFloatVectorField, StringField, Field
 
-backbone_model_id = "sentence-transformers/msmarco-distilbert-dot-v5"
+backbone_model_id = "sentence-transformers/all-MiniLM-L6-v2"
 tokenizer = AutoTokenizer.from_pretrained(backbone_model_id, use_fast=True)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model = load_model(backbone_model_id, device)
@@ -39,27 +39,27 @@ except Exception as e:
 
 analyzer = StandardAnalyzer()
 index_path = "./runs/common/lucene_hnsw_index"
-delete_folder(index_path)
+# delete_folder(index_path)
 index_jpath = Paths.get(index_path)
 config = IndexWriterConfig(analyzer)
 writer = IndexWriter(FSDirectory.open(index_jpath), config)
 
-corpus, queries, qrels = load_dataset(dataset="msmarco", length=100_000)
+corpus, queries, qrels = load_dataset(dataset="msmarco", length=200_000)
 print(
     f"Corpus size={len(corpus)}, queries size={len(queries)}, qrels size={len(qrels)}"
 )
 
-sep = " "
-for doc_id, doc in tqdm.tqdm(iterable=corpus.items(), desc="build_hnsw"):
-    doc = (doc["title"] + sep + doc["text"]).strip()
-    doc_emb = encode_dense(doc).cpu()[0].tolist()
-    lucene_document = Document()
-    lucene_document.add(StringField("doc_id", doc_id, Field.Store.YES))
-    lucene_document.add(
-        KnnFloatVectorField("vector", doc_emb, VectorSimilarityFunction.DOT_PRODUCT)
-    )
-    writer.addDocument(lucene_document)
-writer.close()
+# sep = " "
+# for doc_id, doc in tqdm.tqdm(iterable=corpus.items(), desc="build_hnsw"):
+#    doc = (doc["title"] + sep + doc["text"]).strip()
+#    doc_emb = encode_dense(doc).cpu()[0].tolist()
+#    lucene_document = Document()
+#    lucene_document.add(StringField("doc_id", doc_id, Field.Store.YES))
+#    lucene_document.add(
+#        KnnFloatVectorField("vector", doc_emb, VectorSimilarityFunction.DOT_PRODUCT)
+#    )
+#    writer.addDocument(lucene_document)
+# writer.close()
 
 start = time.time()
 reader = DirectoryReader.open(FSDirectory.open(index_jpath))
@@ -68,9 +68,11 @@ print("HNSW index size:", num_docs)
 searcher = IndexSearcher(reader)
 results = {}
 top_k = 1000
+total_time = 0
 for query_id, query in tqdm.tqdm(iterable=queries.items(), desc="search"):
     query_emb = encode_dense(query).cpu()[0].tolist()
     query = KnnFloatVectorQuery("vector", query_emb, top_k)
+    start_query = time.time()
     hits = searcher.search(query, top_k).scoreDocs
     stored_fields = searcher.storedFields()
     query_result = {}
@@ -78,8 +80,10 @@ for query_id, query in tqdm.tqdm(iterable=queries.items(), desc="search"):
         hit_doc = stored_fields.document(hit.doc)
         query_result[hit_doc["doc_id"]] = hit.score
     results[query_id] = query_result
+    total_time += time.time() - start_query
 reader.close()
 print("Search time:", time.time() - start)
+print("Search time without encoding:", total_time)
 
 ndcg, _map, recall, precision, mrr = eval_with_dot_score_function(qrels, results)
 print(ndcg)
