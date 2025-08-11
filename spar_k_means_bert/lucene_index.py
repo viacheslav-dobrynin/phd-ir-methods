@@ -14,6 +14,15 @@ from org.apache.lucene.document import NumericDocValuesField
 from org.apache.lucene.queries.function import FunctionQuery
 from org.apache.lucene.queries.function.valuesource import FloatFieldSource
 from org.apache.lucene.queries.function.valuesource import SumFloatFunction
+from org.apache.lucene.search import (
+    BooleanQuery,
+    BooleanClause,
+    FieldExistsQuery,
+    QueryRescorer,
+)
+from org.apache.lucene.index import ReaderUtil
+
+import heapq, math
 
 from common.field import to_doc_id_field
 from common.path import delete_folder
@@ -74,19 +83,55 @@ class LuceneIndex:
         try:
             query_ids = list(queries.keys())
             for query_id in tqdm.tqdm(iterable=query_ids, desc="search"):
-                query = self.__build_query(
-                    token_and_cluster_id_calculator(queries[query_id])
+                token_and_cluster_id_list = token_and_cluster_id_calculator(
+                    queries[query_id]
                 )
-                hits = searcher.search(query, top_k).scoreDocs
+                pre = self.__build_prequery(token_and_cluster_id_list)
+                candidates = searcher.search(pre, 3000)
+
+                if len(candidates.scoreDocs) == 0:
+                    continue
+                leaves = searcher.getIndexReader().leaves()
+                heap = []  # min-heap (score, docID)
+                for sd in candidates.scoreDocs:
+                    leaf_idx = ReaderUtil.subIndex(sd.doc, leaves)
+                    leaf = leaves.get(leaf_idx)
+                    local = sd.doc - leaf.docBase
+                    r = leaf.reader()
+
+                    total = 0.0
+                    for fname in token_and_cluster_id_list:
+                        dv = r.getNumericDocValues(fname)
+                        if dv is None:
+                            continue
+                        if dv.advance(local) == local:
+                            total += float(dv.longValue())
+
+                    if total == 0.0:
+                        continue
+                    if len(heap) < top_k:
+                        heapq.heappush(heap, (total, sd.doc))
+                    else:
+                        if total > heap[0][0]:
+                            heapq.heapreplace(heap, (total, sd.doc))
                 stored_fields = searcher.storedFields()
                 query_result = {}
-                for hit in hits:
-                    hit_doc = stored_fields.document(hit.doc)
-                    query_result[hit_doc["doc_id"]] = hit.score
+                while heap:
+                    score, docID = heapq.heappop(heap)
+                    doc = stored_fields.document(docID)
+                    query_result[doc.get("doc_id")] = float(score)
                 results[query_id] = query_result
         finally:
             reader.close()
         return results
+
+    def __build_prequery(self, token_and_cluster_id_list, msm_ratio=0.1):
+        b = BooleanQuery.Builder()
+        for fname in token_and_cluster_id_list:
+            b.add(FieldExistsQuery(fname), BooleanClause.Occur.SHOULD)
+        msm = max(1, int(math.ceil(msm_ratio * max(1, len(token_and_cluster_id_list)))))
+        b.setMinimumNumberShouldMatch(msm)
+        return b.build()
 
     def __build_query(self, token_and_cluster_id_list):
         field_sources = []
