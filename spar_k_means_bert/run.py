@@ -20,7 +20,7 @@ from spar_k_means_bert.util.encode import encode_to_token_embs
 from spar_k_means_bert.util.eval import eval_with_dot_score_function
 from spar_k_means_bert.util.map import LazyMap
 
-DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 # Mean Pooling - Take attention mask into account for correct averaging
@@ -151,7 +151,7 @@ if __name__ == '__main__':
     print("HNSW index size: ", hnsw_index.ntotal)
     if args.train_hnsw_only:
         print("HNSW index is trained")
-        exit(0) # TODO: extract to function and use return
+        exit(0)  # TODO: extract to function and use return
     hnsw_index.hnsw.efSearch = args.hnsw_ef_search
     inverted_index = build_inverted_index(doc_id_to_embs)
     # Retrieval
