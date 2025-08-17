@@ -4,7 +4,7 @@ class LazyMap:
         self._result = None
 
     def _get(self):
-        if not self._result:
+        if self._result is None:
             self._result = self._builder()
         return self._result
 
