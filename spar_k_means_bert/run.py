@@ -61,7 +61,7 @@ def build_doc_id_to_embs():
     return doc_id_to_embs
 
 
-def build_hnsw_index():
+def train_vector_dictionary():
     hnsw_file_name = f"{args.base_path}hnsw.index"
     faiss_idx_to_token_file_name = f"{args.base_path}faiss_idx_to_token.pickle"
 
@@ -79,7 +79,7 @@ def build_hnsw_index():
     hnsw_index.hnsw.efConstruction = args.hnsw_ef_construction
     faiss_idx_to_token = {}
 
-    for token, doc_ids in tqdm.tqdm(iterable=token_to_doc_ids.items(), desc="build_hnsw"):
+    for token, doc_ids in tqdm.tqdm(iterable=token_to_doc_ids.items(), desc="train_vector_dictionary"):
         emb_batches = []
         for doc_id in doc_ids:
             emb_batch = get_contextualized_embs(token, doc_id)
@@ -146,7 +146,7 @@ if __name__ == '__main__':
     print(f"Dense similarity threshold: {threshold}")
     # Indexing
     doc_id_to_embs = build_doc_id_to_embs()
-    hnsw_index, faiss_idx_to_token = build_hnsw_index()
+    hnsw_index, faiss_idx_to_token = train_vector_dictionary()
     print("HNSW index size: ", hnsw_index.ntotal)
     if args.train_hnsw_only:
         print("HNSW index is trained")
