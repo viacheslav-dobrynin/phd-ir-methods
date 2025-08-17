@@ -32,7 +32,7 @@ def tokenize(texts):
     return tokenizer(texts, padding=True, truncation=True, return_tensors='pt').to(DEVICE)
 
 
-def get_contextualized_embs(token, doc_id):
+def get_contextualized_embs(doc_id_to_embs, token, doc_id):
     input_ids, _ = dataset.get_by_doc_id(doc_id)
     embs = doc_id_to_embs[doc_id]
     idxs = torch.nonzero(input_ids == token, as_tuple=True)
@@ -61,7 +61,7 @@ def build_doc_id_to_embs():
     return doc_id_to_embs
 
 
-def train_vector_dictionary():
+def train_vector_dictionary(doc_id_to_embs):
     hnsw_file_name = f"{args.base_path}hnsw.index"
     faiss_idx_to_token_file_name = f"{args.base_path}faiss_idx_to_token.pickle"
 
@@ -82,7 +82,7 @@ def train_vector_dictionary():
     for token, doc_ids in tqdm.tqdm(iterable=token_to_doc_ids.items(), desc="train_vector_dictionary"):
         emb_batches = []
         for doc_id in doc_ids:
-            emb_batch = get_contextualized_embs(token, doc_id)
+            emb_batch = get_contextualized_embs(doc_id_to_embs, token, doc_id)
             emb_batches.append(emb_batch.cpu().detach().numpy())
         embs = np.concatenate(emb_batches)
         kmeans = sklearn.cluster.KMeans(
@@ -101,7 +101,7 @@ def train_vector_dictionary():
     return hnsw_index, faiss_idx_to_token
 
 
-def build_inverted_index():
+def build_inverted_index(doc_id_to_embs):
     if args.in_memory_index:
         inverted_index = InMemoryInvertedIndex(args.base_path, args.use_cache)
     else:
@@ -146,13 +146,13 @@ if __name__ == '__main__':
     print(f"Dense similarity threshold: {threshold}")
     # Indexing
     doc_id_to_embs = build_doc_id_to_embs()
-    hnsw_index, faiss_idx_to_token = train_vector_dictionary()
+    hnsw_index, faiss_idx_to_token = train_vector_dictionary(doc_id_to_embs)
     print("HNSW index size: ", hnsw_index.ntotal)
     if args.train_hnsw_only:
         print("HNSW index is trained")
         exit(0) # TODO: extract to function and use return
     hnsw_index.hnsw.efSearch = args.hnsw_ef_search
-    inverted_index = build_inverted_index()
+    inverted_index = build_inverted_index(doc_id_to_embs)
     # Retrieval
     results = inverted_index.search(queries, query_tokens_calculator, args.search_top_k)
     ndcg, _map, recall, precision, mrr = eval_with_dot_score_function(qrels, results)
