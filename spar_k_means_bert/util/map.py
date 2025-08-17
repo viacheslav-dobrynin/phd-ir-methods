@@ -1,5 +1,8 @@
+from typing import Callable, Mapping
+
+
 class LazyMap:
-    def __init__(self, builder) -> None:
+    def __init__(self, builder: Callable[..., Mapping]) -> None:
         self._builder = builder
         self._result = None
 
