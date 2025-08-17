@@ -134,7 +134,7 @@ def query_tokens_calculator(query):
     return list(map(lambda idx: faiss_idx_to_token[idx], np.unique(I.flatten())))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     args = get_args()
     # Data, tokenizer, model
     tokenizer = AutoTokenizer.from_pretrained(args.backbone_model_id, use_fast=True)
