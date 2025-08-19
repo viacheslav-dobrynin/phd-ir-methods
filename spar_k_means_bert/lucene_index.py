@@ -14,6 +14,14 @@ from org.apache.lucene.document import NumericDocValuesField
 from org.apache.lucene.queries.function import FunctionQuery
 from org.apache.lucene.queries.function.valuesource import FloatFieldSource
 from org.apache.lucene.queries.function.valuesource import SumFloatFunction
+from org.apache.lucene.search import (
+    BooleanQuery,
+    BooleanClause,
+    FieldExistsQuery,
+    ConstantScoreQuery,
+)
+
+import math
 
 from common.field import to_doc_id_field
 from common.path import delete_folder
@@ -79,17 +87,22 @@ class LuceneIndex:
                 )
                 hits = searcher.search(query, top_k).scoreDocs
                 stored_fields = searcher.storedFields()
-                query_result = {}
-                for hit in hits:
-                    hit_doc = stored_fields.document(hit.doc)
-                    query_result[hit_doc["doc_id"]] = hit.score
-                results[query_id] = query_result
+                results[query_id] = {
+                    stored_fields.document(hit.doc)["doc_id"]: hit.score for hit in hits
+                }
         finally:
             reader.close()
         return results
 
-    def __build_query(self, token_and_cluster_id_list):
+    def __build_query(self, token_and_cluster_id_list, msm_ratio=0.1):
         field_sources = []
+        fields_exist_query = BooleanQuery.Builder()
         for token_and_cluster_id in token_and_cluster_id_list:
             field_sources.append(FloatFieldSource(token_and_cluster_id))
-        return FunctionQuery(SumFloatFunction(field_sources))
+            fields_exist_query.add(FieldExistsQuery(token_and_cluster_id), BooleanClause.Occur.SHOULD)
+        msm = max(1, int(math.ceil(msm_ratio * max(1, len(token_and_cluster_id_list)))))
+        fields_exist_query.setMinimumNumberShouldMatch(msm)
+        query = BooleanQuery.Builder()
+        query.add(FunctionQuery(SumFloatFunction(field_sources)), BooleanClause.Occur.MUST)
+        query.add(ConstantScoreQuery(fields_exist_query.build()), BooleanClause.Occur.FILTER)
+        return query.build()
