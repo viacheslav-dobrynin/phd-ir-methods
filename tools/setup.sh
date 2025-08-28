@@ -48,6 +48,5 @@ echo "Downloaded Vector Distionary"
 
 echo "Running SparkBERT"
 cd "$BASE_PATH/phd-ir-methods"
-LD_LIBRARY_PATH="$CONDA_PREFIX/lib:/usr/lib/jvm/java-21-amazon-corretto/lib/server/"
 python -m spar_k_means_bert.run --use-cache -d msmarco
 echo "Finished"
