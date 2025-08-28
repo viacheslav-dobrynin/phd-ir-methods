@@ -9,6 +9,7 @@ import sklearn.cluster
 import torch
 import tqdm
 from torch.utils.data import DataLoader
+from torch.nn.utils.rnn import pad_sequence
 from transformers import AutoTokenizer
 
 from common.encode_dense_fun_builder import build_encode_dense_fun
@@ -32,6 +33,17 @@ def mean_pooling(token_embeddings, attention_mask):
 
 def tokenize(texts):
     return tokenizer(texts, padding=True, truncation=True, return_tensors='pt').to(DEVICE)
+
+
+def collate_fn(batch):
+    """Custom collate function to handle variable-length sequences when using lazy loading."""
+    doc_ids, input_ids_list, attention_mask_list = zip(*batch)
+
+    # Pad sequences to the same length
+    input_ids_padded = pad_sequence(input_ids_list, batch_first=True, padding_value=tokenizer.pad_token_id)
+    attention_mask_padded = pad_sequence(attention_mask_list, batch_first=True, padding_value=0)
+
+    return list(doc_ids), input_ids_padded, attention_mask_padded
 
 
 def get_contextualized_embs(doc_id_to_embs, token, doc_id):
@@ -140,7 +152,11 @@ if __name__ == "__main__":
     # Data, tokenizer, model
     tokenizer = AutoTokenizer.from_pretrained(args.backbone_model_id, use_fast=True)
     dataset, queries, qrels = get_dataset(tokenize=tokenize, dataset=args.dataset, length=args.dataset_length, lazy_loading=args.lazy_loading)
-    dataloader = DataLoader(dataset=dataset, batch_size=args.batch_size)
+    dataloader = DataLoader(
+        dataset=dataset,
+        batch_size=args.batch_size,
+        collate_fn=collate_fn if args.lazy_loading else None
+    )
     model = load_model(model_id=args.backbone_model_id, device=DEVICE)
     encode_dense = build_encode_dense_fun(tokenizer=tokenizer, model=model, device=DEVICE)
     threshold = 0.8 * encode_dense("She enjoys reading books in her free time.") @ encode_dense("In her leisure hours, she likes to read novels.").T
