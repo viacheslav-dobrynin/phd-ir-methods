@@ -139,7 +139,7 @@ if __name__ == "__main__":
     args = get_args()
     # Data, tokenizer, model
     tokenizer = AutoTokenizer.from_pretrained(args.backbone_model_id, use_fast=True)
-    dataset, queries, qrels = get_dataset(tokenize=tokenize, dataset=args.dataset, length=args.dataset_length)
+    dataset, queries, qrels = get_dataset(tokenize=tokenize, dataset=args.dataset, length=args.dataset_length, lazy_loading=args.lazy_loading)
     dataloader = DataLoader(dataset=dataset, batch_size=args.batch_size)
     model = load_model(model_id=args.backbone_model_id, device=DEVICE)
     encode_dense = build_encode_dense_fun(tokenizer=tokenizer, model=model, device=DEVICE)
