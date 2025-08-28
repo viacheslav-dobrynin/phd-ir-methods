@@ -48,5 +48,5 @@ echo "Downloaded Vector Distionary"
 
 echo "Running SparkBERT"
 cd "$BASE_PATH/phd-ir-methods"
-python -m spar_k_means_bert.run --use-cache -d msmarco
+python -m spar_k_means_bert.run --use-cache --lazy-loading -d msmarco
 echo "Finished"
