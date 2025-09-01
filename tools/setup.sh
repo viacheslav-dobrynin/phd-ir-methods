@@ -46,6 +46,12 @@ aws s3 cp s3://spark-bert-vector-dictionary/uploads/hnsw.index "$BASE_PATH/phd-i
 aws s3 cp s3://spark-bert-vector-dictionary/uploads/faiss_idx_to_token.pickle "$BASE_PATH/phd-ir-methods/faiss_idx_to_token.pickle"
 echo "Downloaded Vector Distionary"
 
+echo "Trying to download inverted index"
+aws s3 cp s3://spark-bert-vector-dictionary/lucene_inverted_index \
+  "$BASE_PATH/phd-ir-methods/runs/spar_k_means_bert/lucene_inverted_index" --recursive ||
+  echo "Unable to download inverted index"
+echo "Tried to download inverted index"
+
 echo "Running SparkBERT"
 cd "$BASE_PATH/phd-ir-methods"
 python -m spar_k_means_bert.run --use-cache --lazy-loading -d msmarco
