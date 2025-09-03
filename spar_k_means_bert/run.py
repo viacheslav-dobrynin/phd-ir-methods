@@ -1,6 +1,7 @@
 import time
 import os
 import pickle
+import time
 from collections import defaultdict
 
 import faiss
@@ -9,6 +10,7 @@ import sklearn.cluster
 import torch
 import tqdm
 from torch.utils.data import DataLoader
+from torch.nn.utils.rnn import pad_sequence
 from transformers import AutoTokenizer
 
 from common.encode_dense_fun_builder import build_encode_dense_fun
@@ -32,6 +34,17 @@ def mean_pooling(token_embeddings, attention_mask):
 
 def tokenize(texts):
     return tokenizer(texts, padding=True, truncation=True, return_tensors='pt').to(DEVICE)
+
+
+def collate_fn(batch):
+    """Custom collate function to handle variable-length sequences when using lazy loading."""
+    doc_ids, input_ids_list, attention_mask_list = zip(*batch)
+
+    # Pad sequences to the same length
+    input_ids_padded = pad_sequence(input_ids_list, batch_first=True, padding_value=tokenizer.pad_token_id)
+    attention_mask_padded = pad_sequence(attention_mask_list, batch_first=True, padding_value=0)
+
+    return list(doc_ids), input_ids_padded, attention_mask_padded
 
 
 def get_contextualized_embs(doc_id_to_embs, token, doc_id):
@@ -63,7 +76,7 @@ def build_doc_id_to_embs():
     return doc_id_to_embs
 
 
-def train_vector_dictionary(doc_id_to_embs):
+def train_vector_dictionary():
     hnsw_file_name = f"{args.base_path}hnsw.index"
     faiss_idx_to_token_file_name = f"{args.base_path}faiss_idx_to_token.pickle"
 
@@ -77,6 +90,7 @@ def train_vector_dictionary(doc_id_to_embs):
         os.remove(faiss_idx_to_token_file_name)
 
     token_to_doc_ids = build_token_to_doc_ids()
+    doc_id_to_embs = build_doc_id_to_embs()
     hnsw_index = faiss.IndexHNSWFlat(model.config.hidden_size, args.hnsw_M)
     hnsw_index.hnsw.efConstruction = args.hnsw_ef_construction
     faiss_idx_to_token = {}
@@ -103,22 +117,25 @@ def train_vector_dictionary(doc_id_to_embs):
     return hnsw_index, faiss_idx_to_token
 
 
-def build_inverted_index(doc_id_to_embs):
+def build_inverted_index():
     if args.in_memory_index:
         inverted_index = InMemoryInvertedIndex(args.base_path, args.use_cache)
     else:
         inverted_index = LuceneIndex(args.base_path, args.use_cache, threshold)
     if inverted_index.size():
         return inverted_index
-    for doc_id, contextualized_embs in tqdm.tqdm(iterable=doc_id_to_embs.items(), desc="build_inverted_index"):
-        contextualized_embs = contextualized_embs.squeeze(0)
-        _, I = hnsw_index.search(contextualized_embs, args.index_n_neighbors)
-        assert len(I) == len(contextualized_embs)
-        faiss_ids = np.unique(I.flatten())  # this help to remove token repetition
-        token_and_cluster_id_list = [faiss_idx_to_token[id] for id in faiss_ids]
-        centroids = torch.from_numpy(hnsw_index.reconstruct_batch(faiss_ids))
-        scores = torch.max(contextualized_embs @ centroids.T, dim=0).values  # MaxSim
-        inverted_index.index(doc_id, token_and_cluster_id_list, scores)
+    for doc_ids, token_ids_batch, attention_mask in tqdm.tqdm(iterable=dataloader, desc="build_inverted_index"):
+        embs = encode_to_token_embs(model=model, input_ids=token_ids_batch, attention_mask=attention_mask)
+        embs = embs.cpu()
+        for idx, doc_id in enumerate(doc_ids):
+            contextualized_embs = embs[idx]
+            _, I = hnsw_index.search(contextualized_embs, args.index_n_neighbors)
+            assert len(I) == len(contextualized_embs)
+            faiss_ids = np.unique(I.flatten())  # this help to remove token repetition
+            token_and_cluster_id_list = [faiss_idx_to_token[id] for id in faiss_ids]
+            centroids = torch.from_numpy(hnsw_index.reconstruct_batch(faiss_ids))
+            scores = torch.max(contextualized_embs @ centroids.T, dim=0).values  # MaxSim
+            inverted_index.index(doc_id, token_and_cluster_id_list, scores)
     inverted_index.complete_indexing()
     return inverted_index
 
@@ -139,22 +156,25 @@ if __name__ == "__main__":
     args = get_args()
     # Data, tokenizer, model
     tokenizer = AutoTokenizer.from_pretrained(args.backbone_model_id, use_fast=True)
-    dataset, queries, qrels = get_dataset(tokenize=tokenize, dataset=args.dataset, length=args.dataset_length)
-    dataloader = DataLoader(dataset=dataset, batch_size=args.batch_size)
+    dataset, queries, qrels = get_dataset(tokenize=tokenize, dataset=args.dataset, length=args.dataset_length, lazy_loading=args.lazy_loading)
+    dataloader = DataLoader(
+        dataset=dataset,
+        batch_size=args.batch_size,
+        collate_fn=collate_fn if args.lazy_loading else None
+    )
     model = load_model(model_id=args.backbone_model_id, device=DEVICE)
     encode_dense = build_encode_dense_fun(tokenizer=tokenizer, model=model, device=DEVICE)
     threshold = 0.8 * encode_dense("She enjoys reading books in her free time.") @ encode_dense("In her leisure hours, she likes to read novels.").T
     threshold = threshold.squeeze(0).cpu()
     print(f"Dense similarity threshold: {threshold}")
     # Indexing
-    doc_id_to_embs = LazyMap(build_doc_id_to_embs)
-    hnsw_index, faiss_idx_to_token = train_vector_dictionary(doc_id_to_embs)
+    hnsw_index, faiss_idx_to_token = train_vector_dictionary()
     print("HNSW index size: ", hnsw_index.ntotal)
     if args.train_hnsw_only:
         print("HNSW index is trained")
         exit(0)  # TODO: extract to function and use return
     hnsw_index.hnsw.efSearch = args.hnsw_ef_search
-    inverted_index = build_inverted_index(doc_id_to_embs)
+    inverted_index = build_inverted_index()
     # Retrieval
     start = time.time()
     results = inverted_index.search(queries, query_tokens_calculator, args.search_top_k)
