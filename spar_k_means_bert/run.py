@@ -7,6 +7,7 @@ from collections import defaultdict
 import faiss
 import numpy as np
 import sklearn.cluster
+from spar_k_means_bert.embs_store import EmbsStore, EmbsStoreBuilder
 import torch
 import tqdm
 from transformers import AutoTokenizer
@@ -53,14 +54,18 @@ def build_token_to_doc_ids():
     return token_to_doc_ids
 
 
-def build_doc_id_to_embs():
-    doc_id_to_embs = {}
-    for doc_ids, token_ids_batch, attention_mask in tqdm.tqdm(iterable=dataloader, desc="encode_to_token_embs"):
-        embs = encode_to_token_embs(model=model, input_ids=token_ids_batch, attention_mask=attention_mask)
-        embs = embs.cpu()
-        for idx, doc_id in enumerate(doc_ids):
-            doc_id_to_embs[doc_id] = embs[idx].unsqueeze(0)
-    return doc_id_to_embs
+def build_doc_id_to_embs(args) -> EmbsStore:
+    try:
+        builder = EmbsStoreBuilder(base_path=args.base_path, model_id=args.backbone_model_id, overwrite=not args.use_cache)
+        for doc_ids, token_ids_batch, attention_mask in tqdm.tqdm(iterable=dataloader, desc="encode_to_token_embs"):
+            embs = encode_to_token_embs(model=model, input_ids=token_ids_batch, attention_mask=attention_mask)
+            embs = embs.cpu()
+            for idx, doc_id in enumerate(doc_ids):
+                builder.add(doc_id, embs[idx])
+        builder.close()
+        return EmbsStore(args.base_path)
+    except FileExistsError:
+        return EmbsStore(args.base_path)
 
 
 def train_vector_dictionary():
@@ -77,7 +82,7 @@ def train_vector_dictionary():
         os.remove(faiss_idx_to_token_file_name)
 
     token_to_doc_ids = build_token_to_doc_ids()
-    doc_id_to_embs = build_doc_id_to_embs()
+    doc_id_to_embs = build_doc_id_to_embs(args)
     hnsw_index = faiss.IndexHNSWFlat(model.config.hidden_size, args.hnsw_M)
     hnsw_index.hnsw.efConstruction = args.hnsw_ef_construction
     faiss_idx_to_token = {}
