@@ -38,9 +38,7 @@ def tokenize(texts):
 def get_contextualized_embs(doc_id_to_embs, token, doc_id):
     input_ids, _ = dataset.get_by_doc_id(doc_id)
     embs = doc_id_to_embs[doc_id]
-    idxs = torch.nonzero(input_ids == token, as_tuple=True)
-    return embs[idxs]
-
+    return embs[input_ids.squeeze() == token]
 
 def build_token_to_doc_ids():
     token_to_doc_ids = defaultdict(set)
@@ -90,7 +88,7 @@ def train_vector_dictionary(doc_id_to_embs):
         emb_batches = []
         for doc_id in doc_ids:
             emb_batch = get_contextualized_embs(doc_id_to_embs, token, doc_id)
-            emb_batches.append(emb_batch.cpu().detach().numpy())
+            emb_batches.append(emb_batch)
         embs = np.concatenate(emb_batches)
         kmeans = sklearn.cluster.KMeans(
             n_clusters=args.kmeans_n_clusters if len(embs) > args.kmeans_n_clusters else len(embs),
@@ -116,14 +114,14 @@ def build_inverted_index(doc_id_to_embs):
     if inverted_index.size():
         return inverted_index
     for doc_id, contextualized_embs in tqdm.tqdm(iterable=doc_id_to_embs.items(), desc="build_inverted_index"):
-        contextualized_embs = contextualized_embs.squeeze(0)
         _, I = hnsw_index.search(contextualized_embs, args.index_n_neighbors)
         assert len(I) == len(contextualized_embs)
         faiss_ids = np.unique(I.flatten())  # this help to remove token repetition
         token_and_cluster_id_list = [faiss_idx_to_token[id] for id in faiss_ids]
-        centroids = torch.from_numpy(hnsw_index.reconstruct_batch(faiss_ids))
+        contextualized_embs = torch.from_numpy(contextualized_embs).to(DEVICE)
+        centroids = torch.from_numpy(hnsw_index.reconstruct_batch(faiss_ids)).to(DEVICE)
         scores = torch.max(contextualized_embs @ centroids.T, dim=0).values  # MaxSim
-        inverted_index.index(doc_id, token_and_cluster_id_list, scores)
+        inverted_index.index(doc_id, token_and_cluster_id_list, scores.cpu())
     inverted_index.complete_indexing()
     return inverted_index
 

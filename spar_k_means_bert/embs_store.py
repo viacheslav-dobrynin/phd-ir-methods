@@ -40,17 +40,13 @@ class EmbsStore(Mapping):
         entry = self._idx.get(doc_id)
         if not entry:
             raise KeyError(f"Document ID '{doc_id}' not found in the index.")
-        return self.__get_embs_by_entry(entry)
+        return self.__get_embs_by_entry(entry).astype(np.float32)
 
     def __iter__(self):
-        for doc_id, entry in self._idx.items():
-            yield doc_id, self.__get_embs_by_entry(entry)
+        return iter(self._idx)
 
     def __getitem__(self, doc_id: str):
         return self.get_embs(doc_id)
-
-    def __contains__(self, doc_id: str) -> bool:
-        return doc_id in self._idx
 
     def __len__(self) -> int:
         return len(self._idx)
