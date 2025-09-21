@@ -1,6 +1,6 @@
 import os
 import json
-from typing import Dict, Optional
+from typing import Dict, Mapping, Optional
 import numpy as np
 from dataclasses import dataclass
 
@@ -15,7 +15,7 @@ class IndexEntry:
     length: int
 
 
-class EmbsStore:
+class EmbsStore(Mapping):
     def __init__(self, base_path: str):
         meta_path = os.path.join(base_path, META_NAME)
         with open(meta_path, "r", encoding="utf-8") as f:
@@ -38,16 +38,28 @@ class EmbsStore:
     def get_embs(self, doc_id: str) -> np.ndarray:
         """Returs embs [length, dim] (store's dtype)"""
         entry = self._idx.get(doc_id)
-        assert entry.length > 0
-        left = entry.start * self.dim
-        right = (entry.start + entry.length) * self.dim
-        return self._mm[left:right].reshape(entry.length, self.dim)
+        if not entry:
+            raise KeyError(f"Document ID '{doc_id}' not found in the index.")
+        return self.__get_embs_by_entry(entry)
+
+    def __iter__(self):
+        for doc_id, entry in self._idx.items():
+            yield doc_id, self.__get_embs_by_entry(entry)
+
+    def __getitem__(self, doc_id: str):
+        return self.get_embs(doc_id)
 
     def __contains__(self, doc_id: str) -> bool:
         return doc_id in self._idx
 
     def __len__(self) -> int:
         return len(self._idx)
+
+    def __get_embs_by_entry(self, entry: IndexEntry) -> np.ndarray:
+        assert entry.length > 0
+        left = entry.start * self.dim
+        right = (entry.start + entry.length) * self.dim
+        return self._mm[left:right].reshape(entry.length, self.dim)
 
 
 class EmbsStoreBuilder:
