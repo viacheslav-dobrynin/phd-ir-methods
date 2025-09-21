@@ -8,6 +8,7 @@ import faiss
 import numpy as np
 import sklearn.cluster
 from spar_k_means_bert.embs_store import EmbsStore, EmbsStoreBuilder
+from spar_k_means_bert.util.map import LazyMap
 import torch
 import tqdm
 from transformers import AutoTokenizer
@@ -20,7 +21,6 @@ from spar_k_means_bert.in_memory_inverted_index import InMemoryInvertedIndex
 from spar_k_means_bert.lucene_index import LuceneIndex
 from spar_k_means_bert.util.encode import encode_to_token_embs
 from spar_k_means_bert.util.eval import eval_with_dot_score_function
-from spar_k_means_bert.util.map import LazyMap
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -152,7 +152,7 @@ if __name__ == "__main__":
     threshold = threshold.squeeze(0).cpu()
     print(f"Dense similarity threshold: {threshold}")
     # Indexing
-    doc_id_to_embs = LazyMap(build_doc_id_to_embs)
+    doc_id_to_embs = LazyMap(lambda: build_doc_id_to_embs(args))
     hnsw_index, faiss_idx_to_token = train_vector_dictionary(doc_id_to_embs)
     print("HNSW index size: ", hnsw_index.ntotal)
     if args.train_hnsw_only:
