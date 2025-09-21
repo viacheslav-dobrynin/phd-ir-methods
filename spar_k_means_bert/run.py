@@ -68,7 +68,7 @@ def build_doc_id_to_embs(args) -> EmbsStore:
         return EmbsStore(args.base_path)
 
 
-def train_vector_dictionary():
+def train_vector_dictionary(doc_id_to_embs):
     hnsw_file_name = f"{args.base_path}hnsw.index"
     faiss_idx_to_token_file_name = f"{args.base_path}faiss_idx_to_token.pickle"
 
@@ -109,7 +109,7 @@ def train_vector_dictionary():
     return hnsw_index, faiss_idx_to_token
 
 
-def build_inverted_index():
+def build_inverted_index(doc_id_to_embs):
     if args.in_memory_index:
         inverted_index = InMemoryInvertedIndex(args.base_path, args.use_cache)
     else:
@@ -156,13 +156,14 @@ if __name__ == "__main__":
     threshold = threshold.squeeze(0).cpu()
     print(f"Dense similarity threshold: {threshold}")
     # Indexing
-    hnsw_index, faiss_idx_to_token = train_vector_dictionary()
+    doc_id_to_embs = LazyMap(build_doc_id_to_embs)
+    hnsw_index, faiss_idx_to_token = train_vector_dictionary(doc_id_to_embs)
     print("HNSW index size: ", hnsw_index.ntotal)
     if args.train_hnsw_only:
         print("HNSW index is trained")
         exit(0)  # TODO: extract to function and use return
     hnsw_index.hnsw.efSearch = args.hnsw_ef_search
-    inverted_index = build_inverted_index()
+    inverted_index = build_inverted_index(doc_id_to_embs)
     # Retrieval
     start = time.time()
     results = inverted_index.search(queries, query_tokens_calculator, args.search_top_k)
