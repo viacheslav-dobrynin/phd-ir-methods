@@ -53,13 +53,21 @@ def get_corpus(dataset_name: str):
 
 
 def get_dataloader(config: Config, tokenizer):
-    corpus = get_corpus(config.dataset)
+    # corpus = get_corpus(config.dataset)
     # Create dataset and dataloader
-    dataset = DocDataset(config, corpus, tokenizer)
-    dataloader = DataLoader(dataset, batch_size=config.batch_size, shuffle=True)
-    del corpus
+    # dataset = DocDataset(config, corpus, tokenizer)
+    # dataloader = DataLoader(dataset, batch_size=config.batch_size, shuffle=True)
+    # del corpus
+    from datasets import load_dataset
+    from torch.utils.data import DataLoader
+    from PIL import Image
+    ds = load_dataset("nlphuji/flickr30k")
+    def collate_pil(batch):
+        # batch — список словарей; поле с изображением называется 'image' (PIL.Image)
+        return [record['image'] for record in batch]
+    dataloader = DataLoader(ds['test'], batch_size=config.batch_size, shuffle=True, num_workers=4, collate_fn=collate_pil)
     # anneal params
-    dataset_n = len(dataset)
+    dataset_n = len(ds['test'])
     max_iter = len(dataloader) * config.epochs
     print(f'{dataset_n=}')
     print(f'{max_iter=}')
