@@ -59,15 +59,13 @@ def get_dataloader(config: Config, tokenizer):
     # dataloader = DataLoader(dataset, batch_size=config.batch_size, shuffle=True)
     # del corpus
     from datasets import load_dataset
-    from torch.utils.data import DataLoader
-    from PIL import Image
-    ds = load_dataset("nlphuji/flickr30k")
+    corpus = load_dataset("nlphuji/flickr30k")['test']
     def collate_pil(batch):
         # batch — список словарей; поле с изображением называется 'image' (PIL.Image)
         return [record['image'] for record in batch]
-    dataloader = DataLoader(ds['test'], batch_size=config.batch_size, shuffle=True, num_workers=4, collate_fn=collate_pil)
+    dataloader = DataLoader(corpus, batch_size=config.batch_size, shuffle=True, num_workers=4, collate_fn=collate_pil)
     # anneal params
-    dataset_n = len(ds['test'])
+    dataset_n = len(corpus)
     max_iter = len(dataloader) * config.epochs
     print(f'{dataset_n=}')
     print(f'{max_iter=}')
