@@ -12,7 +12,7 @@ sudo apt install gh
 gh auth login
 git clone https://github.com/viacheslav-dobrynin/phd-ir-methods
 cd phd-ir-methods
-git checkout method1_filter_stopwords
+git checkout method2_multimodality
 echo "Installed gh repo"
 
 echo "Installing conda"
