@@ -1,6 +1,6 @@
 import argparse
 
-def get_args():
+def get_args() -> argparse.Namespace:
     # Hyperparameters
     parser = argparse.ArgumentParser()
     parser.add_argument('-mid', '--backbone-model-id', type=str, default='sentence-transformers/all-MiniLM-L6-v2', help='backbone model id (default sentence-transformers/all-MiniLM-L6-v2)')

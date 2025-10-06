@@ -52,13 +52,8 @@ class CorpusDataset(Dataset):
             )
 
 
-def get_dataset(
-    tokenize: Callable,
-    dataset: str | None = None,
-    length: int | None = None,
-    lazy_loading: bool = False,
-) -> Tuple[CorpusDataset, Dict[str, str], Dict[str, Dict[str, int]]]:
-    corpus, queries, qrels = load_dataset(dataset=dataset, length=length)
+def get_dataset(tokenize: Callable, args) -> Tuple[CorpusDataset, Dict[str, str], Dict[str, Dict[str, int]]]:
+    corpus, queries, qrels = load_dataset(dataset=args.dataset, length=args.dataset_length)
     sep = " "
     corpus = {
         doc_id: (doc["title"] + sep + doc["text"]).strip()
@@ -67,7 +62,7 @@ def get_dataset(
     print(
         f"Corpus size={len(corpus)}, queries size={len(queries)}, qrels size={len(qrels)}"
     )
-    return CorpusDataset(corpus=corpus, tokenize=tokenize, lazy_loading=lazy_loading), queries, qrels
+    return CorpusDataset(corpus=corpus, tokenize=tokenize, lazy_loading=args.lazy_loading), queries, qrels
 
 
 def get_dataloader(dataset: CorpusDataset, args, pad_token_id: int) -> DataLoader:
