@@ -5,7 +5,7 @@ from common.datasets import load_dataset
 
 
 class CorpusDataset(Dataset):
-    def __init__(self, corpus: Dict, tokenize: Callable, lazy_loading: bool = False):
+    def __init__(self, corpus: Dict, tokenize: Callable, lazy_loading: bool):
         self.doc_ids = list(corpus.keys())
         self.doc_id_to_idx = {doc_id: idx for idx, doc_id in enumerate(self.doc_ids)}
         docs = list(corpus.values())
