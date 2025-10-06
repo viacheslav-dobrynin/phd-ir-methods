@@ -1,6 +1,6 @@
 import argparse
 
-def get_args():
+def get_args() -> argparse.Namespace:
     # Hyperparameters
     parser = argparse.ArgumentParser()
     parser.add_argument('-mid', '--backbone-model-id', type=str, default='sentence-transformers/all-MiniLM-L6-v2', help='backbone model id (default sentence-transformers/all-MiniLM-L6-v2)')
@@ -17,6 +17,7 @@ def get_args():
     parser.add_argument('--train-hnsw-only', action="store_true", help='train hnsw only (default False)')
     parser.add_argument('-imi', '--in-memory-index', action="store_true", help='in-memory inverted index type (default False)')
     parser.add_argument('-c', '--use-cache', action="store_true", help='use cache (default False)')
+    parser.add_argument('--lazy-loading', action="store_true", help='use lazy loading for dataset to save memory (default False)')
     parser.add_argument('-p', '--base-path', type=str, default='./', help='base path (default ./)')
     args = parser.parse_args()
     print(f"Params: {args}")

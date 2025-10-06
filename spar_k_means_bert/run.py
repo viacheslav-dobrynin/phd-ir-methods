@@ -8,13 +8,12 @@ import numpy as np
 import sklearn.cluster
 import torch
 import tqdm
-from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
 
 from common.encode_dense_fun_builder import build_encode_dense_fun
 from common.model import load_model
 from spar_k_means_bert.args import get_args
-from spar_k_means_bert.dataset import get_dataset
+from spar_k_means_bert.dataset import get_dataset, get_dataloader
 from spar_k_means_bert.in_memory_inverted_index import InMemoryInvertedIndex
 from spar_k_means_bert.lucene_index import LuceneIndex
 from spar_k_means_bert.util.encode import encode_to_token_embs
@@ -139,8 +138,8 @@ if __name__ == "__main__":
     args = get_args()
     # Data, tokenizer, model
     tokenizer = AutoTokenizer.from_pretrained(args.backbone_model_id, use_fast=True)
-    dataset, queries, qrels = get_dataset(tokenize=tokenize, dataset=args.dataset, length=args.dataset_length)
-    dataloader = DataLoader(dataset=dataset, batch_size=args.batch_size)
+    dataset, queries, qrels = get_dataset(tokenize=tokenize, args=args)
+    dataloader = get_dataloader(dataset=dataset, args=args, pad_token_id=tokenizer.pad_token_id)
     model = load_model(model_id=args.backbone_model_id, device=DEVICE)
     encode_dense = build_encode_dense_fun(tokenizer=tokenizer, model=model, device=DEVICE)
     threshold = 0.8 * encode_dense("She enjoys reading books in her free time.") @ encode_dense("In her leisure hours, she likes to read novels.").T
