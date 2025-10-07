@@ -1,10 +1,24 @@
-import gc
-import numpy as np
-import time
+import pyperf
 from scipy import stats
+import numpy as np
+import sys
+import gc
+import time
 
 
-def run_bench(
+def run_bench(bench_name, func_to_bench, confidence=0.95):
+    runner = pyperf.Runner()
+    bench = runner.bench_func(bench_name, func_to_bench)
+    if "--worker" in sys.argv:
+        return
+    values = bench.get_values()
+    ci_low, ci_high = stats.t.interval(
+        confidence, len(values) - 1, loc=np.mean(values), scale=stats.sem(values)
+    )
+    print(f"Confidence interval ({confidence}): [{ci_low}, {ci_high}]")
+
+
+def run_bench_custom(
     bench_name,
     func_to_bench,
     confidence=0.95,
