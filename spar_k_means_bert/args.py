@@ -19,7 +19,6 @@ def get_args() -> argparse.Namespace:
     parser.add_argument('-c', '--use-cache', action="store_true", help='use cache (default False)')
     parser.add_argument('--lazy-loading', action="store_true", help='use lazy loading for dataset to save memory (default False)')
     parser.add_argument('-p', '--base-path', type=str, default='./', help='base path (default ./)')
-    parser.add_argument('--eval-or-bench', type=str, default='eval', help='eval or bench (default eval)')
     args = parser.parse_args()
     print(f"Params: {args}")
     return args

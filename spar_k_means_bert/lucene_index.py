@@ -62,14 +62,9 @@ class LuceneIndex:
         self.writer.forceMerge(1, True)
         self.writer.commit()
 
-    def get_reader_and_searcher(self):
-        reader = DirectoryReader.open(FSDirectory.open(self.index_jpath))
-        searcher = IndexSearcher(reader)
-        return reader, searcher
-
     def size(self):
         try:
-            reader, _ = self.get_reader_and_searcher()
+            reader = DirectoryReader.open(FSDirectory.open(self.index_jpath))
             num_docs = reader.numDocs()
             reader.close()
             return num_docs
@@ -79,15 +74,9 @@ class LuceneIndex:
     def delete_index(self):
         delete_folder(self.index_path)
 
-    def search_by_query(self, searcher, query, token_and_cluster_id_calculator, top_k=1000):
-        lucene_query = self.__build_query(token_and_cluster_id_calculator(query))
-        hits = searcher.search(lucene_query, top_k).scoreDocs
-        stored_fields = searcher.storedFields()
-        results = {stored_fields.document(hit.doc)["doc_id"]: hit.score for hit in hits}
-        return results
-
     def search(self, queries, token_and_cluster_id_calculator, top_k=1000):
-        reader, searcher = self.get_reader_and_searcher()
+        reader = DirectoryReader.open(FSDirectory.open(self.index_jpath))
+        searcher = IndexSearcher(reader)
         results = {}
 
         try:

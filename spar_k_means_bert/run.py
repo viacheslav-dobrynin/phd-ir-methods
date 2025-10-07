@@ -3,7 +3,6 @@ import os
 import pickle
 from collections import defaultdict
 
-from common import bench
 import faiss
 import numpy as np
 import sklearn.cluster
@@ -156,30 +155,17 @@ if __name__ == "__main__":
     hnsw_index.hnsw.efSearch = args.hnsw_ef_search
     inverted_index = build_inverted_index(doc_id_to_embs)
     # Retrieval
-    if args.eval_or_bench == "eval":
-        start = time.time()
-        results = inverted_index.search(queries, query_tokens_calculator, args.search_top_k)
-        print("Search time:", time.time() - start)
-        ndcg, _map, recall, precision, mrr = eval_with_dot_score_function(qrels, results)
-        print(ndcg, _map, recall, precision, mrr)
-        with open("retrieval_results.txt", "a") as f:
-            f.write(str(args))
-            f.write("\n")
-            f.write(str(ndcg))
-            f.write(str(mrr))
-            f.write(str(_map))
-            f.write(str(recall))
-            f.write(str(precision))
-            f.write("\n\n")
-    elif args.eval_or_bench == "bench":
-        assert isinstance(inverted_index, LuceneIndex)
-        reader, searcher = inverted_index.get_reader_and_searcher()
-        try:
-            for query in list(queries.values())[:3]:
-                bench.run_bench(
-                    bench_name=query,
-                    func_to_bench=lambda: inverted_index.search_by_query(searcher, query, query_tokens_calculator, args.search_top_k))
-        finally:
-            reader.close()
-    else:
-        raise ValueError(f"Unknown eval-or-bench arg value: {args.eval_or_bench}")
+    start = time.time()
+    results = inverted_index.search(queries, query_tokens_calculator, args.search_top_k)
+    print("Search time:", time.time() - start)
+    ndcg, _map, recall, precision, mrr = eval_with_dot_score_function(qrels, results)
+    print(ndcg, _map, recall, precision, mrr)
+    with open("retrieval_results.txt", "a") as f:
+        f.write(str(args))
+        f.write("\n")
+        f.write(str(ndcg))
+        f.write(str(mrr))
+        f.write(str(_map))
+        f.write(str(recall))
+        f.write(str(precision))
+        f.write("\n\n")
