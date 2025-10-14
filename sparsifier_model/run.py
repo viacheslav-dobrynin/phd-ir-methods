@@ -28,7 +28,7 @@ from datasets import load_dataset
 
 
 class LuceneRunner:
-    def __init__(self, encode_fun, dataset=None, docs_number=None):
+    def __init__(self, encode_fun, dataset=None, docs_number=None, modality="image2image"):
         jcc_path = f"./tools/jcc"
         if jcc_path not in sys.path:
             sys.path.append(jcc_path)
@@ -40,8 +40,10 @@ class LuceneRunner:
         self.analyzer = StandardAnalyzer()
         self.index_path = "./runs/sparsifier_model/lucene_inverted_index"
         self.index_jpath = Paths.get(self.index_path)
-        corpus = load_dataset("nlphuji/flickr30k", cache_dir="/opt/dlami/nvme/tmp/hf_cache")['test']
-        self.corpus = {img_id:image for img_id, image in zip(corpus['img_id'],corpus['image'])}
+        self.modality = modality
+        if modality == "image2image":
+            corpus = load_dataset("nlphuji/flickr30k", cache_dir="/opt/dlami/nvme/tmp/hf_cache")['test']
+            self.corpus = {img_id:image for img_id, image in zip(corpus['img_id'],corpus['image'])}
 
     def index(self, batch_size=300):
         config = IndexWriterConfig(self.analyzer)
@@ -91,9 +93,13 @@ class LuceneRunner:
 
         try:
             query_id = "0"
-            img = self.corpus[query_id]
-            print(img)
-            query_emb = self.encode([img])[0]
+            if self.modality == "image2image":
+                img = self.corpus[query_id]
+                query_emb = self.encode([img], self.modality)[0]
+            elif self.modality == "text2image":
+                query_emb = self.encode(["water"], self.modality)[0]
+            else:
+                raise ValueError(f"Unknown modality: {self.modality}")
             hits = searcher.search(build_query(query_emb), top_k).scoreDocs
             stored_fields = searcher.storedFields()
             query_result = {}
@@ -134,9 +140,9 @@ if __name__ == "__main__":
     model.backbone.eval()
     for p in model.backbone.parameters():
         p.requires_grad = False
-    def encode_sparse_from_docs(docs):
+    def encode_sparse_from_docs(docs, modality):
         docs = list(docs)
-        return model.encode(docs)
+        return model.encode(docs, modality)
     #corpus = load_dataset("nlphuji/flickr30k", cache_dir="/opt/dlami/nvme/tmp/hf_cache")['test'][1]
     #print(encode_sparse_from_docs([corpus['image']]).shape)
     #print("Number of nonzero", torch.count_nonzero(encode_sparse_from_docs([corpus['image']])))

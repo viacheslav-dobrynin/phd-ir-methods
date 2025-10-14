@@ -93,15 +93,26 @@ class Autoencoder(L.LightningModule):
         x, mu, std = LN(x)
         return x, dict(mu=mu, std=std)
 
-    def encode(self, batch) -> tuple[torch.Tensor, dict[str, Any]]:
+    def encode(self, batch, modality="image2image") -> tuple[torch.Tensor, dict[str, Any]]:
         """
         :param x: input data (shape: [batch, n_inputs])
         :return: autoencoder latents (shape: [batch, n_latents])
         """
-        pixel_values = self.processor(
-            images=batch, return_tensors="pt", padding=True
-        ).pixel_values.to(self.backbone.device)
-        x = self.backbone.get_image_features(pixel_values=pixel_values)
+        if modality == "image2image":
+            pixel_values = self.processor(
+                images=batch, return_tensors="pt", padding=True
+            ).pixel_values.to(self.backbone.device)
+            x = self.backbone.get_image_features(pixel_values=pixel_values)
+        elif modality == "text2image":
+            tokens = self.processor(
+                text=batch, return_tensors="pt", padding=True
+            ).to(self.backbone.device)
+            x = self.backbone.get_text_features(
+                input_ids=tokens["input_ids"],
+                attention_mask=tokens.get("attention_mask", None)
+            )
+        else:
+            raise ValueError(f"Unknown modality: {self.modality}")
         x, _ = self.preprocess(x)
         return self.activation(self.encode_pre_act(x))
 
