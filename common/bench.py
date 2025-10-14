@@ -7,19 +7,11 @@ from scipy import stats
 
 
 def run_bench(
-    bench_name: str,
     func_to_bench: Callable[[], None],
-    confidence: float = 0.95,
     warmup: int = 10,
     repeats: int = 1000,
     min_total_s: Optional[float] = None,
-    unit: str = "ms",
-):
-    valid_units = {"s": 1.0, "ms": 1e3, "us": 1e6, "ns": 1e9}
-    if unit not in valid_units:
-        raise ValueError(f"Unknown unit: {unit}. Expected one of {sorted(valid_units.keys())}")
-    if not (0 < confidence <= 1):
-        raise ValueError("confidence must be in the interval (0, 1]")
+) -> list[float]:
     if warmup < 0:
         raise ValueError("warmup must be >= 0")
     if repeats < 2:
@@ -47,6 +39,19 @@ def run_bench(
         if was_gc:
             gc.enable()
 
+    return samples
+
+def show_stats(
+    bench_name: str,
+    samples: list[float],
+    confidence: float = 0.95,
+    unit: str = "ms",
+):
+    valid_units = {"s": 1.0, "ms": 1e3, "us": 1e6, "ns": 1e9}
+    if unit not in valid_units:
+        raise ValueError(f"Unknown unit: {unit}. Expected one of {sorted(valid_units.keys())}")
+    if not (0 < confidence <= 1):
+        raise ValueError("confidence must be in the interval (0, 1]")
     n = len(samples)
     samples = np.array(samples, dtype=float)
 
@@ -74,4 +79,4 @@ if __name__ == "__main__":
         for _ in range(n - 1):
             prev, curr = curr, prev + curr
 
-    run_bench("Fibo", lambda: fibo(1000))
+    show_stats("Fibo", run_bench(lambda: fibo(1000)))
