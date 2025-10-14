@@ -41,7 +41,7 @@ def run_bench(
 
     return samples
 
-def show_stats(
+def calc_stats(
     bench_name: str,
     samples: list[float],
     confidence: float = 0.95,
@@ -79,4 +79,4 @@ if __name__ == "__main__":
         for _ in range(n - 1):
             prev, curr = curr, prev + curr
 
-    show_stats("Fibo", run_bench(lambda: fibo(1000)))
+    calc_stats("Fibo", run_bench(lambda: fibo(1000)))
