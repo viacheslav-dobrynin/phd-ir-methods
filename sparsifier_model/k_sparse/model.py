@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import wandb
-from transformers import AutoModel
+from transformers import AutoModel, AutoProcessor
 
 from common.pooling import mean_pooling
 from sparsifier_model.k_sparse.modules import LN, TiedTranspose, TopK
@@ -35,12 +35,13 @@ class Autoencoder(L.LightningModule):
         """
         super().__init__()
         self.save_hyperparameters()
+        self.processor = AutoProcessor.from_pretrained(config.backbone_model_id)
         backbone = AutoModel.from_pretrained(config.backbone_model_id).to(config.device)
         backbone.eval()
         for p in backbone.parameters():
             p.requires_grad = False
         self.backbone = backbone
-        n_inputs = backbone.config.hidden_size
+        n_inputs = backbone.config.projection_dim
 
         self.pre_bias = nn.Parameter(torch.zeros(n_inputs))
         self.encoder: nn.Module = nn.Linear(n_inputs, config.latent_dim, bias=False)
@@ -92,13 +93,26 @@ class Autoencoder(L.LightningModule):
         x, mu, std = LN(x)
         return x, dict(mu=mu, std=std)
 
-    def encode(self, token_ids, token_mask) -> tuple[torch.Tensor, dict[str, Any]]:
+    def encode(self, batch, modality="image2image") -> tuple[torch.Tensor, dict[str, Any]]:
         """
         :param x: input data (shape: [batch, n_inputs])
         :return: autoencoder latents (shape: [batch, n_latents])
         """
-        x = self.backbone(input_ids=token_ids, attention_mask=token_mask)
-        x = mean_pooling(model_output=x, attention_mask=token_mask)
+        if modality == "image2image":
+            pixel_values = self.processor(
+                images=batch, return_tensors="pt", padding=True
+            ).pixel_values.to(self.backbone.device)
+            x = self.backbone.get_image_features(pixel_values=pixel_values)
+        elif modality == "text2image":
+            tokens = self.processor(
+                text=batch, return_tensors="pt", padding=True
+            ).to(self.backbone.device)
+            x = self.backbone.get_text_features(
+                input_ids=tokens["input_ids"],
+                attention_mask=tokens.get("attention_mask", None)
+            )
+        else:
+            raise ValueError(f"Unknown modality: {self.modality}")
         x, _ = self.preprocess(x)
         return self.activation(self.encode_pre_act(x))
 
@@ -136,16 +150,26 @@ class Autoencoder(L.LightningModule):
         return latents_pre_act, latents, recons
 
     def training_step(self, batch, batch_idx):
-        token_ids, token_mask = batch
-        x = self.backbone(input_ids=token_ids, attention_mask=token_mask)
-        x = mean_pooling(model_output=x, attention_mask=token_mask)
+        batch_size = len(batch)
+        pixel_values = self.processor(
+            images=batch, return_tensors="pt", padding=True
+        ).pixel_values.to(self.backbone.device)
+        x = self.backbone.get_image_features(pixel_values=pixel_values)
         latents_pre_act, latents, recons = self.forward(x)
         mse_loss = self.mse_loss_alpha * F.mse_loss(input=recons, target=x)
 
         # reg_loss = self.regularization_loss(z)
         dist_loss = self.distance_loss(x, latents)
         loss = mse_loss + dist_loss  # reg_loss + dist_loss
-        self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
+        self.log(
+            "train_loss",
+            loss,
+            on_step=True,
+            on_epoch=True,
+            prog_bar=True,
+            batch_size=batch_size,
+        )
+
         outs = {
             "loss": loss,
             "mse_loss": mse_loss,

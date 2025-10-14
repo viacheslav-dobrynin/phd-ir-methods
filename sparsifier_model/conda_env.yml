@@ -7,9 +7,11 @@ channels:
 dependencies:
   - python=3.11
   - faiss-gpu
-  - pytorch=2.5.1
-  - torchvision=0.20.1
+  - pytorch=2.6.0
+  - torchvision=0.21.0
   - pytorch-lightning=2.5.1.post0
+  - pillow=11.3.0
+  - datasets=3.6.0
   - transformers
   - numpy<2
   - nltk
