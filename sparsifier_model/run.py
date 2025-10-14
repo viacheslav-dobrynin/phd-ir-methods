@@ -90,16 +90,17 @@ class LuceneRunner:
         results = {}
 
         try:
-            query_ids = list(self.queries.keys())
-            for query_id in query_ids:
-                query_emb = self.encode([self.queries[query_id]])[0]
-                hits = searcher.search(build_query(query_emb), top_k).scoreDocs
-                stored_fields = searcher.storedFields()
-                query_result = {}
-                for hit in hits:
-                    hit_doc = stored_fields.document(hit.doc)
-                    query_result[hit_doc["doc_id"]] = hit.score
-                results[query_id] = query_result
+            query_id = "0"
+            img = self.corpus[query_id]
+            print(img)
+            query_emb = self.encode([img])[0]
+            hits = searcher.search(build_query(query_emb), top_k).scoreDocs
+            stored_fields = searcher.storedFields()
+            query_result = {}
+            for hit in hits:
+                hit_doc = stored_fields.document(hit.doc)
+                query_result[hit_doc["doc_id"]] = hit.score
+            results[query_id] = query_result
         finally:
             reader.close()
         return results
@@ -141,12 +142,14 @@ if __name__ == "__main__":
     #print("Number of nonzero", torch.count_nonzero(encode_sparse_from_docs([corpus['image']])))
 
     runner = LuceneRunner(encode_fun=encode_sparse_from_docs)
-    runner.delete_index()
-    runner.index(batch_size=128)
+    if runner.size() == 0:
+        runner.delete_index()
+        runner.index(batch_size=128)
     print("Inverted index size:", runner.size())
 
     #start = time.time()
-    #search_results = runner.search(top_k=1000)
+    search_results = runner.search()
+    print(search_results)
     #print("Search time:", time.time() - start)
 
     #ndcg, _map, recall, precision, mrr = eval_with_dot_score_function(
