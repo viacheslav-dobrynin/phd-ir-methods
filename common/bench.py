@@ -67,8 +67,8 @@ def show_stats(
         return f"{x * scale:.3f} {unit}"
 
     print(f"{bench_name}: n={n}")
-    print(f"mean:   {fmt(mean)}   std:    {fmt(std)}   CI {int(confidence * 100)}%: [{fmt(lo)}, {fmt(hi)}]")
-    print(f"p50:    {fmt(p50)}   p90:    {fmt(p90)}   p95: {fmt(p95)}")
+    print(f"mean:   {fmt(mean)}   std:    {fmt(std)}    CI {int(confidence * 100)}%: [{fmt(lo)}, {fmt(hi)}]")
+    print(f"p50:    {fmt(p50)}   p90:    {fmt(p90)}   p95:    {fmt(p95)}")
 
 
 
