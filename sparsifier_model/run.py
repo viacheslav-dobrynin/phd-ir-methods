@@ -160,6 +160,7 @@ class LuceneRunner:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--eval-or-bench', type=str, default='eval', help='eval or bench (default eval)')
+    parser.add_argument('-l', '--dataset-length', type=int, default=None, help='Dataset length (default None, all dataset)')
     args = parser.parse_args()
     print(f"Params: {args}")
 
@@ -189,7 +190,7 @@ if __name__ == "__main__":
     print("Number of nonzero", torch.count_nonzero(encode_sparse_from_docs("test")))
 
     runner = LuceneRunner(
-        encode_fun=encode_sparse_from_docs, dataset="msmarco", docs_number=50_000
+        encode_fun=encode_sparse_from_docs, dataset="msmarco", docs_number=args.dataset_length
     )
     if runner.size() == 0:
         runner.delete_index()
