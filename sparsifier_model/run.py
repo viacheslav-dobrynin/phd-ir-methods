@@ -1,3 +1,4 @@
+import argparse
 import time
 import itertools
 import sys
@@ -15,6 +16,7 @@ from org.apache.lucene.search import IndexSearcher
 from org.apache.lucene.store import FSDirectory
 from tqdm.autonotebook import trange
 
+from common.bench import run_bench, calc_stats
 from common.datasets import load_dataset
 from common.path import delete_folder
 from common.field import to_field_name, to_doc_id_field
@@ -120,31 +122,33 @@ class LuceneRunner:
             writer.commit()
             writer.close()
 
+    def get_reader_and_searcher(self):
+        reader = DirectoryReader.open(FSDirectory.open(self.index_jpath))
+        searcher = IndexSearcher(reader)
+        return reader, searcher
+
     def size(self):
         try:
-            reader = DirectoryReader.open(FSDirectory.open(self.index_jpath))
+            reader, _ = self.get_reader_and_searcher()
             num_docs = reader.numDocs()
             reader.close()
             return num_docs
         except:
             return 0
 
-    def search(self, top_k=10):
-        reader = DirectoryReader.open(FSDirectory.open(self.index_jpath))
-        searcher = IndexSearcher(reader)
-        results = {}
+    def search_by_query(self, searcher, query, top_k=1000):
+        query_emb = self.encode([query])[0]
+        hits = searcher.search(build_query(query_emb), top_k).scoreDocs
+        stored_fields = searcher.storedFields()
+        results = {stored_fields.document(hit.doc)["doc_id"]: hit.score for hit in hits}
+        return results
 
+    def search(self, top_k=10):
+        reader, searcher = self.get_reader_and_searcher()
+        results = {}
         try:
-            query_ids = list(self.queries.keys())
-            for query_id in query_ids:
-                query_emb = self.encode([self.queries[query_id]])[0]
-                hits = searcher.search(build_query(query_emb), top_k).scoreDocs
-                stored_fields = searcher.storedFields()
-                query_result = {}
-                for hit in hits:
-                    hit_doc = stored_fields.document(hit.doc)
-                    query_result[hit_doc["doc_id"]] = hit.score
-                results[query_id] = query_result
+            for query_id, query in self.queries.items():
+                results[query_id] = self.search_by_query(searcher=searcher, query=query, top_k=top_k)
         finally:
             reader.close()
         return results
@@ -154,6 +158,12 @@ class LuceneRunner:
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--eval-or-bench', type=str, default='eval', help='eval or bench (default eval)')
+    parser.add_argument('-l', '--dataset-length', type=int, default=None, help='Dataset length (default None, all dataset)')
+    args = parser.parse_args()
+    print(f"Params: {args}")
+
     config = Config(model_type=ModelType.K_SPARSE)
     print("Device:", config.device, torch.cuda.is_available())
     print("Torch:", torch.__version__)
@@ -176,25 +186,43 @@ if __name__ == "__main__":
     encode_sparse_from_docs = build_encode_sparse_fun(
         config=config, tokenizer=tokenizer, model=model, threshold=None
     )
-    print(encode_sparse_from_docs("test").shape)
+    print("Vector shape:", encode_sparse_from_docs("test").shape)
     print("Number of nonzero", torch.count_nonzero(encode_sparse_from_docs("test")))
 
     runner = LuceneRunner(
-        encode_fun=encode_sparse_from_docs, dataset="msmarco", docs_number=50_000
+        encode_fun=encode_sparse_from_docs, dataset="msmarco", docs_number=args.dataset_length
     )
-    runner.delete_index()
-    runner.index(batch_size=128)
+    if runner.size() == 0:
+        runner.delete_index()
+        runner.index(batch_size=128)
     print("Inverted index size:", runner.size())
 
-    start = time.time()
-    search_results = runner.search(top_k=1000)
-    print("Search time:", time.time() - start)
+    if args.eval_or_bench == "eval":
+        start = time.time()
+        search_results = runner.search(top_k=1000)
+        print("Search time:", time.time() - start)
 
-    ndcg, _map, recall, precision, mrr = eval_with_dot_score_function(
-        qrels=runner.qrels, results=search_results
-    )
-    print(ndcg, _map, recall, precision, mrr)
-    start = time.time()
-    runner.queries = {1: "Some test query"}
-    runner.search()
-    print("Query time:", time.time() - start)
+        ndcg, _map, recall, precision, mrr = eval_with_dot_score_function(
+            qrels=runner.qrels, results=search_results
+        )
+        print(ndcg, _map, recall, precision, mrr)
+
+        start = time.time()
+        runner.queries = {1: "Some test query"}
+        runner.search()
+        print("Query time:", time.time() - start)
+    else:
+        reader, searcher = runner.get_reader_and_searcher()
+        try:
+            # Warmup
+            run_bench(func_to_bench=lambda: runner.search_by_query(searcher, "warmup benchmark query for measuring search latency"), warmup=1000, repeats=10)
+            # Bench
+            queries = list(runner.queries.values())
+            repeats = max(2000, len(queries)) // len(queries)
+            samples = []
+            for query in queries:
+                query_samples = run_bench(func_to_bench=lambda: runner.search_by_query(searcher, query), warmup=0, repeats=repeats)
+                samples.extend(query_samples)
+            calc_stats("Bench results", samples)
+        finally:
+            reader.close()

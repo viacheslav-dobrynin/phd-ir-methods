@@ -1,13 +1,13 @@
 import gc
 import time
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 import numpy as np
 from scipy import stats
 
 
 def run_bench(
-    func_to_bench: Callable[[], None],
+    func_to_bench: Callable[[], Any],
     warmup: int = 10,
     repeats: int = 1000,
     min_total_s: Optional[float] = None,
