@@ -49,7 +49,7 @@ analyzer = StandardAnalyzer()
 index_path = "./runs/common/lucene_hnsw_index"
 index_jpath = Paths.get(index_path)
 
-corpus, queries, qrels = load_dataset(dataset="msmarco", length=args.dataset_length)
+corpus, queries, qrels = load_dataset(dataset="msmarco", split="dev", length=args.dataset_length)
 print(
     f"Corpus size={len(corpus)}, queries size={len(queries)}, qrels size={len(qrels)}"
 )
