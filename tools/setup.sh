@@ -16,9 +16,10 @@ git checkout method1_filter_stopwords
 echo "Installed gh repo"
 
 echo "Installing conda"
-CONDA_DIR="${CONDA_DIR:-$HOME/miniconda3}"
+CONDA_DIR="${CONDA_DIR:-$BASE_PATH/miniconda3}"
 URL="https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh"
-INST="/tmp/miniconda.sh"
+mkdir -p "$BASE_PATH/tmp"
+INST="$BASE_PATH/tmp/miniconda.sh"
 wget -qO "$INST" "$URL"
 bash "$INST" -b -p "$CONDA_DIR"
 rm -f "$INST"
