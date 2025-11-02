@@ -67,7 +67,7 @@ class InMemoryIndexRunner:
 
 
 class LuceneRunner:
-    def __init__(self, encode_fun, dataset=None, docs_number=None):
+    def __init__(self, encode_fun, dataset=None, docs_number=None, index_path="./runs/sparsifier_model/lucene_inverted_index"):
         jcc_path = f"./tools/jcc"
         if jcc_path not in sys.path:
             sys.path.append(jcc_path)
@@ -77,7 +77,7 @@ class LuceneRunner:
             print(f"Init error: {e}")
         self.encode = encode_fun
         self.analyzer = StandardAnalyzer()
-        self.index_path = "./runs/sparsifier_model/lucene_inverted_index"
+        self.index_path = index_path
         self.index_jpath = Paths.get(self.index_path)
         corpus, self.queries, self.qrels = load_dataset(
             dataset=dataset, length=docs_number
