@@ -11,6 +11,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument(
     "--eval-or-bench", type=str, default="eval", help="eval or bench (default eval)"
 )
+parser.add_argument('-d', '--dataset', type=str, default='msmarco', help='BEIR dataset name (default msmarco)')
 parser.add_argument(
     "-l",
     "--dataset-length",
@@ -38,20 +39,20 @@ def encode_sparse(docs):
             * tokens.attention_mask.unsqueeze(-1),
             dim=1,
         )[0]
-        .squeeze()
     )
     return vecs
 
 
 runner = LuceneRunner(
     encode_fun=encode_sparse,
-    dataset="msmarco",
+    dataset=args.dataset,
+    split="dev",
     docs_number=args.dataset_length,
     index_path="./runs/common/lucene_splade_index",
 )
 if runner.size() == 0:
     runner.delete_index()
-    runner.index(batch_size=128)
+    runner.index(batch_size=8)
 print("Inverted index size:", runner.size())
 
 if args.eval_or_bench == "eval":
