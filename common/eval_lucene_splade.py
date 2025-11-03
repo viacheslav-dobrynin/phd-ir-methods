@@ -29,7 +29,7 @@ model = AutoModelForMaskedLM.from_pretrained(model_id).to(device)
 
 
 def encode_sparse(docs):
-    tokens = tokenizer(docs, return_tensors="pt", padding=True, truncation=True)
+    tokens = tokenizer(docs, return_tensors="pt", padding=True, truncation=True).to(device)
     output = model(**tokens)
     # aggregate the token-level vecs and transform to sparse
     vecs = (
@@ -39,9 +39,6 @@ def encode_sparse(docs):
             dim=1,
         )[0]
         .squeeze()
-        .detach()
-        .cpu()
-        .numpy()
     )
     return vecs
 
