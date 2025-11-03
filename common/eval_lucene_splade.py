@@ -27,10 +27,6 @@ model_id = "naver/splade-cocondenser-ensembledistil"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 model = AutoModelForMaskedLM.from_pretrained(model_id).to(device)
 
-corpus, queries, qrels = load_dataset(
-    dataset="msmarco", split="dev", length=args.dataset_length
-)
-
 
 def encode_sparse(docs):
     tokens = tokenizer(docs, return_tensors="pt", padding=True, truncation=True)
@@ -48,6 +44,7 @@ def encode_sparse(docs):
         .numpy()
     )
     return vecs
+
 
 runner = LuceneRunner(
     encode_fun=encode_sparse,
