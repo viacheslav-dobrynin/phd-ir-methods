@@ -23,7 +23,7 @@ args = parser.parse_args()
 print(f"Params: {args}")
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-model_id = "naver/splade-cocondenser-ensembledistil"
+model_id = "rasyosef/splade-mini"
 
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 model = AutoModelForMaskedLM.from_pretrained(model_id).to(device)
