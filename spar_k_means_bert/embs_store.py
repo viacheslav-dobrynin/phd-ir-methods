@@ -65,8 +65,8 @@ class EmbsStoreBuilder:
         b = EmbsStoreBuilder(base_path, dtype=np.float16, overwrite=True)
         b.add(doc_id, embs_np)  # embs: [n, dim] float32/16
         ...
-        b.finish()
-    After finish, use EmbsStore(base_path) and read.
+        b.close()
+    After close, use EmbsStore(base_path) and read.
     """
 
     def __init__(
