@@ -7,7 +7,7 @@ channels:
 dependencies:
   - python=3.10
   - faiss-gpu
-  - pytorch
+  - pytorch>=2.6.0
   - nltk
   - pip:
       - beir

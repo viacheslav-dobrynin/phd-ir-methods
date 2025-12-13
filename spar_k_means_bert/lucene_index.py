@@ -78,20 +78,25 @@ class LuceneIndex:
         reader = DirectoryReader.open(FSDirectory.open(self.index_jpath))
         searcher = IndexSearcher(reader)
         results = {}
+        import time
 
+        total_time = 0
         try:
             query_ids = list(queries.keys())
             for query_id in tqdm.tqdm(iterable=query_ids, desc="search"):
                 query = self.__build_query(
                     token_and_cluster_id_calculator(queries[query_id])
                 )
+                start = time.time()
                 hits = searcher.search(query, top_k).scoreDocs
                 stored_fields = searcher.storedFields()
                 results[query_id] = {
                     stored_fields.document(hit.doc)["doc_id"]: hit.score for hit in hits
                 }
+                total_time += time.time() - start
         finally:
             reader.close()
+        print("Search time without encoding:", total_time)
         return results
 
     def __build_query(self, token_and_cluster_id_list, msm_ratio=0.1):
