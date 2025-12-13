@@ -43,6 +43,7 @@ def encode_sparse(docs):
     return vecs
 
 
+# TODO: make sense to extract LuceneRunner to the common module
 runner = LuceneRunner(
     encode_fun=encode_sparse,
     dataset=args.dataset,
