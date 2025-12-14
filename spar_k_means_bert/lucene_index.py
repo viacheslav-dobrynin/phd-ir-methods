@@ -10,7 +10,7 @@ from org.apache.lucene.index import IndexWriter
 from org.apache.lucene.search import IndexSearcher
 from org.apache.lucene.store import FSDirectory
 from org.apache.lucene.document import Document
-from org.apache.lucene.document import NumericDocValuesField
+from org.apache.lucene.document import FloatDocValuesField
 from org.apache.lucene.queries.function import FunctionQuery
 from org.apache.lucene.queries.function.valuesource import FloatFieldSource
 from org.apache.lucene.queries.function.valuesource import SumFloatFunction
@@ -50,12 +50,7 @@ class LuceneIndex:
         doc.add(to_doc_id_field(doc_id))
         for token_and_cluster_id, score in zip(token_and_cluster_id_list, scores):
             if not self.threshold or score >= self.threshold:
-                doc.add(
-                    NumericDocValuesField(
-                        token_and_cluster_id,
-                        score.to(torch.float8_e4m3fn).view(dtype=torch.uint8).item(),
-                    )
-                )
+                doc.add(FloatDocValuesField(token_and_cluster_id, score.item()))
         self.writer.addDocument(doc)
 
     def complete_indexing(self):
