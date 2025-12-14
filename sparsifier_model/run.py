@@ -10,7 +10,7 @@ import tools.lucene as lucene
 import torch
 from java.nio.file import Paths
 from org.apache.lucene.analysis.standard import StandardAnalyzer
-from org.apache.lucene.document import Document, FloatDocValuesField, StringField, Field
+from org.apache.lucene.document import Document, FloatDocValuesField
 from org.apache.lucene.index import DirectoryReader, IndexWriterConfig, IndexWriter
 from org.apache.lucene.search import IndexSearcher
 from org.apache.lucene.store import FSDirectory
@@ -20,7 +20,7 @@ from common.bench import run_bench, calc_stats
 from common.datasets import load_dataset
 from common.field import to_field_name, to_doc_id_field
 from common.in_memory_index import InMemoryInvertedIndex
-from common.lucene_inverted_index import LuceneInvertedIndex
+from common.lucene_inverted_index import LuceneInvertedIndex, func_to_bench, to_terms_and_scores
 from common.path import delete_folder
 from common.search import build_query
 from sparsifier_model.config import Config, ModelType
@@ -157,21 +157,6 @@ class LuceneRunner:
     def delete_index(self):
         delete_folder(self.index_path)
 
-def to_terms_and_scores(sparse_vector):
-    sparse_vector = sparse_vector.detach().to("cpu")
-    if sparse_vector.ndim == 2 and sparse_vector.shape[0] == 1:
-        sparse_vector = sparse_vector.squeeze(0)
-    if sparse_vector.ndim != 1:
-        raise ValueError(f"Expected [V] or [1,V], got {tuple(sparse_vector.shape)}")
-    idx = sparse_vector.nonzero(as_tuple=True)[0]
-    terms = [to_field_name(i) for i in idx.tolist()]
-    scores = sparse_vector[idx].tolist()
-    return terms, scores
-
-def func_to_bench(inverted_index, searcher, query, encode):
-    terms, scores = to_terms_and_scores(encode(query))
-    inverted_index.search_by_query(searcher, terms, scores)
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -208,8 +193,8 @@ if __name__ == "__main__":
     corpus, queries, qrels = load_dataset(dataset="msmarco", split="dev", length=args.dataset_length)
     print(f"Corpus size={len(corpus)}, queries size={len(queries)}, qrels size={len(qrels)}")
     inverted_index = LuceneInvertedIndex(index_path="./runs/sparsifier_model/lucene_inverted_index")
-    batch_size=300
     if inverted_index.size() == 0:
+        batch_size=300
         corpus = {
             doc_id: (doc["title"] + " " + doc["text"]).strip()
             for doc_id, doc in corpus.items()

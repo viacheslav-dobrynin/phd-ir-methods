@@ -14,8 +14,24 @@ from org.apache.lucene.search import IndexSearcher
 from org.apache.lucene.store import FSDirectory
 
 import math
-from common.field import to_doc_id_field
+from common.field import to_doc_id_field, to_field_name
 from common.path import delete_folder
+
+
+def to_terms_and_scores(sparse_vector):
+    sparse_vector = sparse_vector.detach().to("cpu")
+    if sparse_vector.ndim == 2 and sparse_vector.shape[0] == 1:
+        sparse_vector = sparse_vector.squeeze(0)
+    if sparse_vector.ndim != 1:
+        raise ValueError(f"Expected [V] or [1,V], got {tuple(sparse_vector.shape)}")
+    idx = sparse_vector.nonzero(as_tuple=True)[0]
+    terms = [to_field_name(i) for i in idx.tolist()]
+    scores = sparse_vector[idx].tolist()
+    return terms, scores
+
+def func_to_bench(inverted_index, searcher, query, encode):
+    terms, scores = to_terms_and_scores(encode(query))
+    inverted_index.search_by_query(searcher, terms, scores)
 
 
 class LuceneInvertedIndex:
