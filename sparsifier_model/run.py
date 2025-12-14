@@ -158,11 +158,14 @@ class LuceneRunner:
         delete_folder(self.index_path)
 
 def to_terms_and_scores(sparse_vector):
-    terms = []
-    scores = []
-    for term in torch.nonzero(sparse_vector):
-        terms.append(term)
-        scores.append(sparse_vector[term].item())
+    sparse_vector = sparse_vector.detach().to("cpu")
+    if sparse_vector.ndim == 2 and sparse_vector.shape[0] == 1:
+        sparse_vector = sparse_vector.squeeze(0)
+    if sparse_vector.ndim != 1:
+        raise ValueError(f"Expected [V] or [1,V], got {tuple(sparse_vector.shape)}")
+    idx = sparse_vector.nonzero(as_tuple=True)[0]
+    terms = [to_field_name(i) for i in idx.tolist()]
+    scores = sparse_vector[idx].tolist()
     return terms, scores
 
 def func_to_bench(inverted_index, searcher, query, encode):
@@ -203,10 +206,14 @@ if __name__ == "__main__":
     print("Number of nonzero", torch.count_nonzero(encode_sparse_from_docs("test")))
 
     corpus, queries, qrels = load_dataset(dataset="msmarco", split="dev", length=args.dataset_length)
+    print(f"Corpus size={len(corpus)}, queries size={len(queries)}, qrels size={len(qrels)}")
     inverted_index = LuceneInvertedIndex(index_path="./runs/sparsifier_model/lucene_inverted_index")
     batch_size=300
     if inverted_index.size() == 0:
-        inverted_index.delete_index()
+        corpus = {
+            doc_id: (doc["title"] + " " + doc["text"]).strip()
+            for doc_id, doc in corpus.items()
+        }
         corpus_items = corpus.items()
         for start_idx in trange(0, len(corpus), batch_size, desc="docs"):
             batch = tuple(itertools.islice(corpus_items, start_idx, start_idx + batch_size))
