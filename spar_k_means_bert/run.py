@@ -11,6 +11,7 @@ import tqdm
 from transformers import AutoTokenizer
 
 from common.encode_dense_fun_builder import build_encode_dense_fun
+from common.lucene_inverted_index import LuceneInvertedIndex
 from common.model import load_model
 from spar_k_means_bert.args import get_args
 from spar_k_means_bert.dataset import get_dataset, get_dataloader
@@ -106,7 +107,10 @@ def build_inverted_index(doc_id_to_embs):
     if args.in_memory_index:
         inverted_index = InMemoryInvertedIndex(args.base_path, args.use_cache)
     else:
-        inverted_index = LuceneIndex(args.base_path, args.use_cache, threshold)
+        index_path = f"{args.base_path}runs/spar_k_means_bert/lucene_inverted_index"
+        inverted_index = LuceneInvertedIndex(index_path, threshold)
+        if not args.use_cache:
+            inverted_index.delete_index()
     if inverted_index.size():
         return inverted_index
     for doc_id, contextualized_embs in tqdm.tqdm(iterable=doc_id_to_embs.items(), desc="build_inverted_index"):

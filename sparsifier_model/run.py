@@ -18,10 +18,11 @@ from tqdm.autonotebook import trange
 
 from common.bench import run_bench, calc_stats
 from common.datasets import load_dataset
-from common.path import delete_folder
 from common.field import to_field_name, to_doc_id_field
-from common.search import build_query
 from common.in_memory_index import InMemoryInvertedIndex
+from common.lucene_inverted_index import LuceneInvertedIndex
+from common.path import delete_folder
+from common.search import build_query
 from sparsifier_model.config import Config, ModelType
 from sparsifier_model.k_sparse.model import Autoencoder
 from sparsifier_model.util.model import build_encode_sparse_fun
@@ -156,6 +157,18 @@ class LuceneRunner:
     def delete_index(self):
         delete_folder(self.index_path)
 
+def to_terms_and_scores(sparse_vector):
+    terms = []
+    scores = []
+    for term in torch.nonzero(sparse_vector):
+        terms.append(term)
+        scores.append(sparse_vector[term].item())
+    return terms, scores
+
+def func_to_bench(inverted_index, searcher, query, encode):
+    terms, scores = to_terms_and_scores(encode(query))
+    inverted_index.search_by_query(searcher, terms, scores)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -189,39 +202,60 @@ if __name__ == "__main__":
     print("Vector shape:", encode_sparse_from_docs("test").shape)
     print("Number of nonzero", torch.count_nonzero(encode_sparse_from_docs("test")))
 
-    runner = LuceneRunner(
-        encode_fun=encode_sparse_from_docs, dataset="msmarco", docs_number=args.dataset_length
-    )
-    if runner.size() == 0:
-        runner.delete_index()
-        runner.index(batch_size=128)
-    print("Inverted index size:", runner.size())
+    corpus, queries, qrels = load_dataset(dataset="msmarco", split="dev", length=args.dataset_length)
+    inverted_index = LuceneInvertedIndex(index_path="./runs/sparsifier_model/lucene_inverted_index")
+    batch_size=300
+    if inverted_index.size() == 0:
+        inverted_index.delete_index()
+        corpus_items = corpus.items()
+        for start_idx in trange(0, len(corpus), batch_size, desc="docs"):
+            batch = tuple(itertools.islice(corpus_items, start_idx, start_idx + batch_size))
+            doc_ids, docs = list(zip(*batch))
+            emb_batch = encode_sparse_from_docs(docs)
+            for doc_id, sparse_vector in zip(doc_ids, emb_batch):
+                terms, scores = to_terms_and_scores(sparse_vector)
+                inverted_index.index(doc_id=doc_id, terms=terms, scores=scores)
+    print("Inverted index size:", inverted_index.size())
 
     if args.eval_or_bench == "eval":
         start = time.time()
-        search_results = runner.search(top_k=1000)
+        search_results = inverted_index.search(
+            queries=queries,
+            sparse_vector_calculator=lambda query: to_terms_and_scores(
+                encode_sparse_from_docs(query)
+            ),
+            top_k=1000,
+        )
         print("Search time:", time.time() - start)
 
         ndcg, _map, recall, precision, mrr = eval_with_dot_score_function(
-            qrels=runner.qrels, results=search_results
+            qrels=qrels, results=search_results
         )
         print(ndcg, _map, recall, precision, mrr)
-
-        start = time.time()
-        runner.queries = {1: "Some test query"}
-        runner.search()
-        print("Query time:", time.time() - start)
     else:
-        reader, searcher = runner.get_reader_and_searcher()
+        reader, searcher = inverted_index.get_reader_and_searcher()
         try:
             # Warmup
-            run_bench(func_to_bench=lambda: runner.search_by_query(searcher, "warmup benchmark query for measuring search latency"), warmup=1000, repeats=10)
+            warmup_query = "warmup benchmark query for measuring search latency"
+            run_bench(
+                func_to_bench=lambda: func_to_bench(
+                    inverted_index, searcher, warmup_query, encode_sparse_from_docs,
+                ),
+                warmup=1000,
+                repeats=10,
+            )
             # Bench
-            queries = list(runner.queries.values())
+            queries = list(queries.values())
             repeats = max(2000, len(queries)) // len(queries)
             samples = []
             for query in queries:
-                query_samples = run_bench(func_to_bench=lambda: runner.search_by_query(searcher, query), warmup=0, repeats=repeats)
+                query_samples = run_bench(
+                    func_to_bench=lambda: func_to_bench(
+                        inverted_index, searcher, query, encode_sparse_from_docs,
+                    ),
+                    warmup=0,
+                    repeats=repeats,
+                )
                 samples.extend(query_samples)
             calc_stats("Bench results", samples)
         finally:
