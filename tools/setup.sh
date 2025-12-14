@@ -30,7 +30,7 @@ echo "Conda installed"
 
 echo "Installing conda env"
 conda env create -f "$BASE_PATH/phd-ir-methods/spar_k_means_bert/conda_env.yml"
-conda activate spar-k-means-bert
+conda activate spark-bert
 echo "Conda env installed and activated"
 
 echo "Preparing PyLucene"
