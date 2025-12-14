@@ -215,6 +215,7 @@ if __name__ == "__main__":
             for doc_id, sparse_vector in zip(doc_ids, emb_batch):
                 terms, scores = to_terms_and_scores(sparse_vector)
                 inverted_index.index(doc_id=doc_id, terms=terms, scores=scores)
+        inverted_index.complete_indexing()
     print("Inverted index size:", inverted_index.size())
 
     if args.eval_or_bench == "eval":

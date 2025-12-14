@@ -135,7 +135,7 @@ def query_tokens_calculator(query):
     contextualized_embs_np = contextualized_embs.squeeze(0).cpu().detach().numpy()
     _, I = hnsw_index.search(contextualized_embs_np, args.search_n_neighbors)
     assert len(I) == len(contextualized_embs_np)
-    return list(map(lambda idx: faiss_idx_to_token[idx], np.unique(I.flatten())))
+    return list(map(lambda idx: faiss_idx_to_token[idx], np.unique(I.flatten()))), None
 
 
 if __name__ == "__main__":

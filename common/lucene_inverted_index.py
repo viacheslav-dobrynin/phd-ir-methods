@@ -39,7 +39,7 @@ class LuceneInvertedIndex:
         doc = Document()
         doc.add(to_doc_id_field(doc_id))
         for term, score in zip(terms, scores):
-            if not self.threshold or score >= self.threshold:
+            if self.threshold is None or score >= self.threshold:
                 doc.add(FeatureField(self.field_name, term, score.item()))
         self.writer.addDocument(doc)
 
@@ -47,6 +47,7 @@ class LuceneInvertedIndex:
         if merge_to_one_segment:
             self.writer.forceMerge(1, True)
         self.writer.commit()
+        self.writer.close()
 
     def delete_index(self):
         delete_folder(self.index_path)
@@ -60,7 +61,7 @@ class LuceneInvertedIndex:
         msm_ratio: float = 0.0,
     ):
         if query_scores is None:
-            query_scores = [1 * len(query_terms)]
+            query_scores = [1] * len(query_terms)
         else:
             assert len(query_terms) == len(query_scores)
         max_w = max(query_scores)
