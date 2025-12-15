@@ -16,7 +16,6 @@ from common.model import load_model
 from spar_k_means_bert.args import get_args
 from spar_k_means_bert.dataset import get_dataset, get_dataloader
 from spar_k_means_bert.in_memory_inverted_index import InMemoryInvertedIndex
-from spar_k_means_bert.lucene_index import LuceneIndex
 from spar_k_means_bert.util.encode import encode_to_token_embs
 from spar_k_means_bert.util.eval import eval_with_dot_score_function
 from spar_k_means_bert.util.map import LazyMap

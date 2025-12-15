@@ -52,11 +52,17 @@ class LuceneInvertedIndex:
 
     def index(self, doc_id: int, terms: list[str], scores: torch.tensor):
         assert len(terms) == len(scores)
+        assert len(terms) == len(set(terms))
         doc = Document()
         doc.add(to_doc_id_field(doc_id))
         for term, score in zip(terms, scores):
             if self.threshold is None or score >= self.threshold:
-                doc.add(FeatureField(self.field_name, term, score.item()))
+                if torch.is_tensor(score):
+                    # discretization
+                    score = float(score.to(torch.float8_e4m3fn).view(dtype=torch.uint8).item())
+                else:
+                    score = float(score)
+                doc.add(FeatureField(self.field_name, term, score))
         self.writer.addDocument(doc)
 
     def complete_indexing(self, merge_to_one_segment: bool = True):
