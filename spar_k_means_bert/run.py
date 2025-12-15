@@ -11,11 +11,11 @@ import tqdm
 from transformers import AutoTokenizer
 
 from common.encode_dense_fun_builder import build_encode_dense_fun
+from common.lucene_inverted_index import LuceneInvertedIndex
 from common.model import load_model
 from spar_k_means_bert.args import get_args
 from spar_k_means_bert.dataset import get_dataset, get_dataloader
 from spar_k_means_bert.in_memory_inverted_index import InMemoryInvertedIndex
-from spar_k_means_bert.lucene_index import LuceneIndex
 from spar_k_means_bert.util.encode import encode_to_token_embs
 from spar_k_means_bert.util.eval import eval_with_dot_score_function
 from spar_k_means_bert.util.map import LazyMap
@@ -106,7 +106,10 @@ def build_inverted_index(doc_id_to_embs):
     if args.in_memory_index:
         inverted_index = InMemoryInvertedIndex(args.base_path, args.use_cache)
     else:
-        inverted_index = LuceneIndex(args.base_path, args.use_cache, threshold)
+        index_path = f"{args.base_path}runs/spar_k_means_bert/lucene_inverted_index"
+        inverted_index = LuceneInvertedIndex(index_path, threshold)
+        if not args.use_cache:
+            inverted_index.delete_index()
     if inverted_index.size():
         return inverted_index
     for doc_id, contextualized_embs in tqdm.tqdm(iterable=doc_id_to_embs.items(), desc="build_inverted_index"):
@@ -131,7 +134,7 @@ def query_tokens_calculator(query):
     contextualized_embs_np = contextualized_embs.squeeze(0).cpu().detach().numpy()
     _, I = hnsw_index.search(contextualized_embs_np, args.search_n_neighbors)
     assert len(I) == len(contextualized_embs_np)
-    return list(map(lambda idx: faiss_idx_to_token[idx], np.unique(I.flatten())))
+    return list(map(lambda idx: faiss_idx_to_token[idx], np.unique(I.flatten()))), None
 
 
 if __name__ == "__main__":

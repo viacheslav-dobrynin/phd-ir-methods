@@ -5,6 +5,7 @@ def get_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument('-mid', '--backbone-model-id', type=str, default='sentence-transformers/all-MiniLM-L6-v2', help='backbone model id (default sentence-transformers/all-MiniLM-L6-v2)')
     parser.add_argument('-d', '--dataset', type=str, default='scifact', help='BEIR dataset name (default scifact)')
+    parser.add_argument('-ds', '--dataset-split', type=str, default='test', help='dataset split (default test)')
     parser.add_argument('-l', '--dataset-length', type=int, default=None, help='Dataset length (default None, all dataset)')
     parser.add_argument('-b', '--batch-size', type=int, default=128, help='batch size (default 128)')
     parser.add_argument('-kmn', '--kmeans-n-clusters', type=int, default=8, help='kmeans clusters number (default 8)')

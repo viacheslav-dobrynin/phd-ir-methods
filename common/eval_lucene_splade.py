@@ -1,7 +1,7 @@
 from common.bench import run_bench, calc_stats
 from common.datasets import load_dataset
+from common.lucene_inverted_index import LuceneInvertedIndex, func_to_bench, to_terms_and_scores
 from spar_k_means_bert.util.eval import eval_with_dot_score_function
-from sparsifier_model.run import LuceneRunner
 from transformers import AutoModelForMaskedLM, AutoTokenizer
 import argparse
 import time
@@ -43,44 +43,57 @@ def encode_sparse(docs):
     return vecs
 
 
-# TODO: make sense to extract LuceneRunner to the common module
-runner = LuceneRunner(
-    encode_fun=encode_sparse,
-    dataset=args.dataset,
-    split="dev",
-    docs_number=args.dataset_length,
-    index_path="./runs/common/lucene_splade_index",
-)
-if runner.size() == 0:
-    runner.delete_index()
-    runner.index(batch_size=8)
-print("Inverted index size:", runner.size())
+corpus, queries, qrels = load_dataset(dataset=args.dataset, split="dev", length=args.dataset_length)
+print(f"Corpus size={len(corpus)}, queries size={len(queries)}, qrels size={len(qrels)}")
+inverted_index = LuceneInvertedIndex("./runs/common/lucene_splade_index")
+if inverted_index.size() == 0:
+    batch_size=8
+    corpus = {
+        doc_id: (doc["title"] + " " + doc["text"]).strip()
+        for doc_id, doc in corpus.items()
+    }
+    inverted_index.index_all(corpus, batch_size, encode_sparse)
+print("Inverted index size:", inverted_index.size())
 
 if args.eval_or_bench == "eval":
     start = time.time()
-    search_results = runner.search(top_k=1000)
+    search_results = inverted_index.search(
+        queries=queries,
+        sparse_vector_calculator=lambda query: to_terms_and_scores(
+            encode_sparse(query)
+        ),
+        top_k=1000,
+    )
     print("Search time:", time.time() - start)
 
     ndcg, _map, recall, precision, mrr = eval_with_dot_score_function(
-        qrels=runner.qrels, results=search_results
+        qrels=qrels, results=search_results
     )
     print(ndcg, _map, recall, precision, mrr)
-
-    start = time.time()
-    runner.queries = {1: "Some test query"}
-    runner.search()
-    print("Query time:", time.time() - start)
 else:
-    reader, searcher = runner.get_reader_and_searcher()
+    reader, searcher = inverted_index.get_reader_and_searcher()
     try:
         # Warmup
-        run_bench(func_to_bench=lambda: runner.search_by_query(searcher, "warmup benchmark query for measuring search latency"), warmup=1000, repeats=10)
+        warmup_query = "warmup benchmark query for measuring search latency"
+        run_bench(
+            func_to_bench=lambda: func_to_bench(
+                inverted_index, searcher, warmup_query, encode_sparse,
+            ),
+            warmup=1000,
+            repeats=10,
+        )
         # Bench
-        queries = list(runner.queries.values())
+        queries = list(queries.values())
         repeats = max(2000, len(queries)) // len(queries)
         samples = []
         for query in queries:
-            query_samples = run_bench(func_to_bench=lambda: runner.search_by_query(searcher, query), warmup=0, repeats=repeats)
+            query_samples = run_bench(
+                func_to_bench=lambda: func_to_bench(
+                    inverted_index, searcher, query, encode_sparse,
+                ),
+                warmup=0,
+                repeats=repeats,
+            )
             samples.extend(query_samples)
         calc_stats("Bench results", samples)
     finally:

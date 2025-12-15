@@ -53,7 +53,7 @@ class CorpusDataset(Dataset):
 
 
 def get_dataset(tokenize: Callable, args) -> Tuple[CorpusDataset, Dict[str, str], Dict[str, Dict[str, int]]]:
-    corpus, queries, qrels = load_dataset(dataset=args.dataset, length=args.dataset_length)
+    corpus, queries, qrels = load_dataset(dataset=args.dataset, split=args.dataset_split, length=args.dataset_length)
     sep = " "
     corpus = {
         doc_id: (doc["title"] + sep + doc["text"]).strip()
