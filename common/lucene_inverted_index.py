@@ -58,8 +58,7 @@ class LuceneInvertedIndex:
         for term, score in zip(terms, scores):
             if self.threshold is None or score >= self.threshold:
                 if torch.is_tensor(score):
-                    # discretization
-                    score = float(score.to(torch.float8_e4m3fn).view(dtype=torch.uint8).item())
+                    score = float(score.item())
                 else:
                     score = float(score)
                 doc.add(FeatureField(self.field_name, term, score))
