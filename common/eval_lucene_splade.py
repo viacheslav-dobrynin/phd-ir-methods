@@ -1,11 +1,8 @@
-import itertools
-
 from common.bench import run_bench, calc_stats
 from common.datasets import load_dataset
 from common.lucene_inverted_index import LuceneInvertedIndex, func_to_bench, to_terms_and_scores
 from spar_k_means_bert.util.eval import eval_with_dot_score_function
 from transformers import AutoModelForMaskedLM, AutoTokenizer
-from tqdm.autonotebook import trange
 import argparse
 import time
 import torch
@@ -55,15 +52,7 @@ if inverted_index.size() == 0:
         doc_id: (doc["title"] + " " + doc["text"]).strip()
         for doc_id, doc in corpus.items()
     }
-    corpus_items = corpus.items()
-    for start_idx in trange(0, len(corpus), batch_size, desc="docs"):
-        batch = tuple(itertools.islice(corpus_items, start_idx, start_idx + batch_size))
-        doc_ids, docs = list(zip(*batch))
-        emb_batch = encode_sparse(docs)
-        for doc_id, sparse_vector in zip(doc_ids, emb_batch):
-            terms, scores = to_terms_and_scores(sparse_vector)
-            inverted_index.index(doc_id=doc_id, terms=terms, scores=scores)
-    inverted_index.complete_indexing()
+    inverted_index.index_all(corpus, batch_size, encode_sparse)
 print("Inverted index size:", inverted_index.size())
 
 if args.eval_or_bench == "eval":

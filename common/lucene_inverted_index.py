@@ -2,6 +2,7 @@ import sys
 import tools.lucene as lucene
 import torch
 import tqdm
+from tqdm.autonotebook import trange
 from java.nio.file import Paths
 from org.apache.lucene.analysis.core import KeywordAnalyzer
 from org.apache.lucene.document import Document
@@ -13,6 +14,7 @@ from org.apache.lucene.search import BooleanClause, BooleanQuery
 from org.apache.lucene.search import IndexSearcher
 from org.apache.lucene.store import FSDirectory
 
+from typing import Mapping
 import math
 from common.field import to_doc_id_field, to_field_name
 from common.path import delete_folder
@@ -63,6 +65,17 @@ class LuceneInvertedIndex:
                     score = float(score)
                 doc.add(FeatureField(self.field_name, term, score))
         self.writer.addDocument(doc)
+
+    def index_all(self, corpus: Mapping[str, str], batch_size: int, encode_fun):
+        items = list(corpus.items())
+        for start_idx in trange(0, len(items), batch_size, desc="index_all"):
+            batch = items[start_idx:start_idx + batch_size]
+            doc_ids, docs = list(zip(*batch))
+            emb_batch = encode_fun(docs).detach().to("cpu")
+            for doc_id, sparse_vector in zip(doc_ids, emb_batch):
+                terms, scores = to_terms_and_scores(sparse_vector)
+                self.index(doc_id=doc_id, terms=terms, scores=scores)
+        self.complete_indexing()
 
     def complete_indexing(self, merge_to_one_segment: bool = True):
         if merge_to_one_segment:

@@ -97,15 +97,7 @@ if __name__ == "__main__":
             doc_id: (doc["title"] + " " + doc["text"]).strip()
             for doc_id, doc in corpus.items()
         }
-        corpus_items = corpus.items()
-        for start_idx in trange(0, len(corpus), batch_size, desc="docs"):
-            batch = tuple(itertools.islice(corpus_items, start_idx, start_idx + batch_size))
-            doc_ids, docs = list(zip(*batch))
-            emb_batch = encode_sparse_from_docs(docs)
-            for doc_id, sparse_vector in zip(doc_ids, emb_batch):
-                terms, scores = to_terms_and_scores(sparse_vector)
-                inverted_index.index(doc_id=doc_id, terms=terms, scores=scores)
-        inverted_index.complete_indexing()
+        inverted_index.index_all(corpus, batch_size, encode_sparse_from_docs)
     print("Inverted index size:", inverted_index.size())
 
     if args.eval_or_bench == "eval":
