@@ -1,6 +1,7 @@
 import argparse
 import sys
 import time
+import json
 
 import torch
 import tqdm
@@ -28,6 +29,7 @@ from org.apache.lucene.document import Document, KnnFloatVectorField, StringFiel
 parser = argparse.ArgumentParser()
 parser.add_argument('--eval-or-bench', type=str, default='eval', help='eval or bench (default eval)')
 parser.add_argument('-l', '--dataset-length', type=int, default=None, help='Dataset length (default None, all dataset)')
+parser.add_argument('--results-path', type=str, default="./results.json", help='results.json output path (default ./results.json)')
 args = parser.parse_args()
 print(f"Params: {args}")
 
@@ -106,6 +108,9 @@ if args.eval_or_bench == "eval":
     finally:
         reader.close()
     print("Search time:", time.time() - start)
+    if args.results_path:
+        with open(args.results_path, "w", encoding="utf-8") as f:
+            json.dump(results, f)
 
     ndcg, _map, recall, precision, mrr = eval_with_dot_score_function(qrels, results)
     print(ndcg)

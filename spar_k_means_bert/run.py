@@ -1,6 +1,7 @@
 import time
 import os
 import pickle
+import json
 from collections import defaultdict
 
 import faiss
@@ -163,6 +164,9 @@ if __name__ == "__main__":
     start = time.time()
     results = inverted_index.search(queries, query_tokens_calculator, args.search_top_k)
     print("Search time:", time.time() - start)
+    if args.results_path:
+        with open(args.results_path, "w", encoding="utf-8") as f:
+            json.dump(results, f)
     ndcg, _map, recall, precision, mrr = eval_with_dot_score_function(qrels, results)
     print(ndcg, _map, recall, precision, mrr)
     with open("retrieval_results.txt", "a") as f:

@@ -6,6 +6,7 @@ from transformers import AutoModelForMaskedLM, AutoTokenizer
 import argparse
 import time
 import torch
+import json
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
@@ -19,6 +20,7 @@ parser.add_argument(
     default=None,
     help="Dataset length (default None, all dataset)",
 )
+parser.add_argument("--results-path", type=str, default="./results.json", help="results.json output path (default ./results.json)")
 args = parser.parse_args()
 print(f"Params: {args}")
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -65,6 +67,9 @@ if args.eval_or_bench == "eval":
         top_k=1000,
     )
     print("Search time:", time.time() - start)
+    if args.results_path:
+        with open(args.results_path, "w", encoding="utf-8") as f:
+            json.dump(search_results, f)
 
     ndcg, _map, recall, precision, mrr = eval_with_dot_score_function(
         qrels=qrels, results=search_results

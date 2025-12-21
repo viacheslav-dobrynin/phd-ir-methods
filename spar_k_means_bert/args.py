@@ -19,6 +19,7 @@ def get_args() -> argparse.Namespace:
     parser.add_argument('-imi', '--in-memory-index', action="store_true", help='in-memory inverted index type (default False)')
     parser.add_argument('-c', '--use-cache', action="store_true", help='use cache (default False)')
     parser.add_argument('--lazy-loading', action="store_true", help='use lazy loading for dataset to save memory (default False)')
+    parser.add_argument('--results-path', type=str, default='./results.json', help='results.json output path (default ./results.json)')
     parser.add_argument('-p', '--base-path', type=str, default='./', help='base path (default ./)')
     args = parser.parse_args()
     print(f"Params: {args}")
